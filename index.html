@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>MatchFeed — Live Scores & Статистика игроков</title>
+  <link rel="stylesheet" href="style.css?v=3.0">
+</head>
+<body>
+  <div class="app-container">
+
+    <!-- Global App Header -->
+    <header class="app-header">
+      <div class="brand" onclick="showView('feed')" style="cursor: pointer;">
+        <div class="logo-badge" aria-hidden="true">
+          <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.45 1-1 1H8c-.55 0-1 .45-1 1v1c0 .55.45 1 1 1h8c.55 0 1-.45 1-1v-1c0-.55-.45-1-1-1h-1c-.55 0-1-.45-1-1v-2.34"></path><path d="M6 4h12a2 2 0 0 1 2 2v3a6 6 0 0 1-6 6h0a6 6 0 0 1-6-6V6a2 2 0 0 1 2-2Z"></path></svg>
+        </div>
+        <span class="brand-title">MatchFeed</span>
+      </div>
+      <button id="refresh-btn" class="refresh-btn" aria-label="Обновить счёт">
+        <svg class="icon icon-refresh" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path><polyline points="21 3 21 8 16 8"></polyline></svg>
+        <span class="refresh-text">Обновить</span>
+      </button>
+    </header>
+
+    <!-- Error/Warning Banner -->
+    <div id="error-banner" class="banner hidden" role="alert">
+      <div class="banner-content">
+        <span class="banner-icon" aria-hidden="true"></span>
+        <span class="banner-message"></span>
+      </div>
+      <button id="banner-retry-btn" class="banner-action-btn" type="button">Повторить</button>
+    </div>
+
+    <!-- ══ VIEW 1: MATCH FEED ══ -->
+    <div id="feed-view" class="app-view">
+      <!-- Sport Selector -->
+      <div class="sub-nav">
+        <div class="sport-tabs">
+          <button class="sport-tab active" data-sport="table-tennis">
+            <svg class="icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M18.36 5.64a9 9 0 0 0-12.72 12.72"></path><path d="M5.64 5.64a9 9 0 0 1 12.72 12.72"></path></svg>
+            <span>Настольный теннис</span>
+          </button>
+          <button class="sport-tab" data-sport="football">
+            <svg class="icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polygon points="12 7 9.5 9 10.5 12.5 13.5 12.5 14.5 9 12 7"></polygon><line x1="12" y1="2" x2="12" y2="7"></line><line x1="4" y1="8" x2="9.5" y2="9"></line><line x1="20" y1="8" x2="14.5" y2="9"></line><line x1="7" y1="18" x2="10.5" y2="12.5"></line><line x1="17" y1="18" x2="13.5" y2="12.5"></line></svg>
+            <span>Футбол</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Status Filters -->
+      <div class="filter-pills">
+        <button class="pill active" data-status="all">Все</button>
+        <button class="pill" data-status="live">
+          <span class="live-dot"></span>
+          <span>Live</span>
+        </button>
+        <button class="pill" data-status="finished">Завершенные</button>
+        <button class="pill" data-status="favorites">
+          <svg class="icon icon-star" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+          <span>Избранное</span>
+        </button>
+      </div>
+
+      <!-- Feed Content -->
+      <main class="feed-content">
+        <div id="matches-container">
+          <div class="feed-loader">Загрузка событий...</div>
+        </div>
+      </main>
+    </div>
+
+    <!-- ══ VIEW 2: MATCH DETAILS ══ -->
+    <div id="match-view" class="app-view hidden">
+      <div class="view-sub-header">
+        <button class="view-back-btn" onclick="showView('feed')" aria-label="Назад к матчам">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          <span>Матчи</span>
+        </button>
+        <span id="match-view-header-title" class="view-header-title">Детали матча</span>
+      </div>
+      <div id="match-details-container" class="view-body">
+        <div class="feed-loader">Загрузка данных матча...</div>
+      </div>
+    </div>
+
+    <!-- ══ VIEW 3: PLAYER PROFILE & STATS ══ -->
+    <div id="player-view" class="app-view hidden">
+      <div class="view-sub-header">
+        <button class="view-back-btn" onclick="goBackFromPlayer()" aria-label="Назад">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          <span id="player-back-label">Назад</span>
+        </button>
+        <span id="player-view-header-title" class="view-header-title">Профиль игрока</span>
+      </div>
+
+      <!-- Light search bar -->
+      <div class="player-search-bar">
+        <div class="search-box">
+          <svg class="search-box-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <input id="player-search-input" class="player-search-input" type="search" placeholder="Поиск игрока (например, Fan Zhendong)..." autocomplete="off" oninput="onPlayerSearchInput(this.value)" />
+        </div>
+      </div>
+
+      <!-- Search results -->
+      <div id="player-search-results" class="player-search-dropdown hidden"></div>
+
+      <!-- Player Content -->
+      <div id="player-view-content" class="view-body">
+        <div class="player-empty-prompt">
+          <div class="empty-state-icon">
+            <svg class="icon" viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+          </div>
+          <div class="empty-state-title">Поиск игрока</div>
+          <div class="empty-state-desc">Введите имя игрока в строке поиска или нажмите на имя в любом матче.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="bottom-bar">
+      <button class="nav-item active" id="nav-matches-btn" onclick="showView('feed')" aria-label="Матчи">
+        <svg class="icon nav-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><circle cx="4" cy="6" r="1.25" fill="currentColor"></circle><circle cx="4" cy="12" r="1.25" fill="currentColor"></circle><circle cx="4" cy="18" r="1.25" fill="currentColor"></circle></svg>
+        <span>Матчи</span>
+      </button>
+      <button class="nav-item" id="nav-favs-btn" onclick="showFavorites()" aria-label="Избранное">
+        <svg class="icon nav-icon icon-star" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+        <span>Избранное</span>
+      </button>
+      <button class="nav-item" id="nav-player-btn" onclick="openPlayerTab()" aria-label="Поиск игрока">
+        <svg class="icon nav-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+        <span>Игрок</span>
+      </button>
+      <button class="nav-item" onclick="openInfoModal()" aria-label="Информация о сервисе">
+        <svg class="icon nav-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+        <span>Инфо</span>
+      </button>
+    </nav>
+
+    <!-- Info Modal -->
+    <div id="info-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="info-modal-title" onclick="handleBackdropClick(event)">
+      <div class="modal-card">
+        <div class="modal-header">
+          <span id="info-modal-title" class="modal-title">О сервисе MatchFeed</span>
+          <button class="modal-close-btn" onclick="closeInfoModal()" aria-label="Закрыть">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-info-row">
+            <span class="modal-info-label">Версия</span>
+            <span class="modal-info-value">v2.0 (Настольный теннис + Футбол)</span>
+          </div>
+          <div class="modal-info-row">
+            <span class="modal-info-label">Стек</span>
+            <span class="modal-info-value">PHP + Python curl_cffi + Vanilla JS</span>
+          </div>
+          <div class="modal-info-row">
+            <span class="modal-info-label">Источник данных</span>
+            <span class="modal-info-value">SofaScore Direct (без лимитов)</span>
+          </div>
+          <div class="modal-info-row">
+            <span class="modal-info-label">Статистика игрока</span>
+            <span class="modal-info-value">Счёт по сетам, очки (до 11), винрейт</span>
+          </div>
+          <div class="modal-info-row">
+            <span class="modal-info-label">Авто-обновление</span>
+            <span class="modal-info-value">Каждые 30 секунд</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="modal-btn-close" onclick="closeInfoModal()">Закрыть</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="app.js?v=3.0"></script>
+</body>
+</html>
