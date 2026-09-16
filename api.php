@@ -25,8 +25,13 @@ if (!is_dir($cacheDir)) {
 function runPython(array $args): array {
     $script = escapeshellarg(__DIR__ . '/sofascore_api.py');
     $cmdArgs = array_map('escapeshellarg', $args);
+
+    $isWin = (PHP_OS_FAMILY === 'Windows');
+    $pyBin = $isWin ? 'python' : 'python3';
+    $devNull = $isWin ? '2>nul' : '2>/dev/null';
+
     // Suppress stderr to avoid environment/zsh warnings contaminating output
-    $cmd = 'python3 ' . $script . ' ' . implode(' ', $cmdArgs) . ' 2>/dev/null';
+    $cmd = $pyBin . ' ' . $script . ' ' . implode(' ', $cmdArgs) . ' ' . $devNull;
     $out = trim((string)shell_exec($cmd));
 
     $start = strpos($out, '{');
