@@ -22,29 +22,111 @@ if (!is_dir($cacheDir)) {
     @mkdir($cacheDir, 0777, true);
 }
 
+function findPythonBinary(): string {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    if (PHP_OS_FAMILY !== 'Windows') {
+        $test = @shell_exec('python3 --version 2>&1');
+        if ($test && stripos($test, 'Python') !== false) {
+            return $cached = 'python3';
+        }
+        return $cached = 'python';
+    }
+
+    $candidates = [
+        'python',
+        'py -3',
+        getenv('LOCALAPPDATA') ? getenv('LOCALAPPDATA') . '\\Programs\\Python\\Python312\\python.exe' : null,
+        getenv('LOCALAPPDATA') ? getenv('LOCALAPPDATA') . '\\Programs\\Python\\Python311\\python.exe' : null,
+        getenv('LOCALAPPDATA') ? getenv('LOCALAPPDATA') . '\\Programs\\Python\\Python310\\python.exe' : null,
+        'C:\\Python312\\python.exe',
+        'C:\\Python311\\python.exe',
+        'py'
+    ];
+
+    foreach ($candidates as $bin) {
+        if (!$bin) continue;
+        if (strpos($bin, '\\') !== false && !file_exists($bin)) {
+            continue;
+        }
+        $testCmd = (strpos($bin, ' ') !== false && strpos($bin, 'py -') === false ? escapeshellarg($bin) : $bin) . ' --version 2>&1';
+        $testOut = @shell_exec($testCmd);
+        if ($testOut && stripos($testOut, 'Python ') !== false && stripos($testOut, 'was not found') === false) {
+            return $cached = (strpos($bin, ' ') !== false && strpos($bin, 'py -') === false) ? escapeshellarg($bin) : $bin;
+        }
+    }
+
+    return $cached = 'python';
+}
+
 function runPython(array $args): array {
-    $script = escapeshellarg(__DIR__ . '/sofascore_api.py');
+    $pyBin = findPythonBinary();
+    $script = __DIR__ . DIRECTORY_SEPARATOR . 'sofascore_api.py';
     $cmdArgs = array_map('escapeshellarg', $args);
+    $cmd = $pyBin . ' ' . escapeshellarg($script) . ' ' . implode(' ', $cmdArgs);
 
-    $isWin = (PHP_OS_FAMILY === 'Windows');
-    $pyBin = $isWin ? 'python' : 'python3';
-    $devNull = $isWin ? '2>nul' : '2>/dev/null';
+    $descriptors = [
+        0 => ['pipe', 'r'],
+        1 => ['pipe', 'w'], // stdout
+        2 => ['pipe', 'w']  // stderr
+    ];
 
-    // Suppress stderr to avoid environment/zsh warnings contaminating output
-    $cmd = $pyBin . ' ' . $script . ' ' . implode(' ', $cmdArgs) . ' ' . $devNull;
-    $out = trim((string)shell_exec($cmd));
+    $env = array_merge($_ENV, [
+        'PYTHONIOENCODING' => 'utf-8',
+        'PYTHONUTF8' => '1',
+        'SYSTEMROOT' => getenv('SYSTEMROOT') ?: 'C:\\Windows',
+        'PATH' => getenv('PATH') ?: ''
+    ]);
 
-    $start = strpos($out, '{');
-    $end = strrpos($out, '}');
+    $process = @proc_open($cmd, $descriptors, $pipes, __DIR__, $env);
+    if (!is_resource($process)) {
+        return ['success' => false, 'error' => "Не удалось запустить процесс: {$pyBin}"];
+    }
+
+    fclose($pipes[0]);
+    $stdout = stream_get_contents($pipes[1]);
+    fclose($pipes[1]);
+    $stderr = stream_get_contents($pipes[2]);
+    fclose($pipes[2]);
+
+    $exitCode = proc_close($process);
+
+    $stdout = trim((string)$stdout);
+    $stderr = trim((string)$stderr);
+
+    $start = strpos($stdout, '{');
+    $end = strrpos($stdout, '}');
     if ($start !== false && $end !== false && $end >= $start) {
-        $jsonStr = substr($out, $start, $end - $start + 1);
+        $jsonStr = substr($stdout, $start, $end - $start + 1);
         $data = json_decode($jsonStr, true);
         if (is_array($data)) {
             return $data;
         }
     }
 
-    return ['success' => false, 'error' => 'Не удалось разобрать ответ сервера', 'raw' => substr($out, 0, 200)];
+    $errorMsg = 'Не удалось получить данные от Sofascore';
+    if ($stderr !== '') {
+        if (stripos($stderr, 'No module named') !== false) {
+            $errorMsg = 'Не установлена библиотека Python: ' . trim($stderr);
+        } elseif (stripos($stderr, 'not recognized') !== false || stripos($stderr, 'was not found') !== false) {
+            $errorMsg = 'Python не найден в системе. Установите Python 3 и curl_cffi.';
+        } else {
+            $errorMsg = 'Ошибка Python: ' . mb_substr(trim($stderr), 0, 300);
+        }
+    } elseif ($stdout !== '') {
+        $errorMsg = 'Некорректный ответ скрипта: ' . mb_substr($stdout, 0, 200);
+    }
+
+    return [
+        'success' => false,
+        'error' => $errorMsg,
+        'exitCode' => $exitCode,
+        'raw_stdout' => substr($stdout, 0, 200),
+        'raw_stderr' => substr($stderr, 0, 200)
+    ];
 }
 
 function getCache(string $key, int $ttl): ?array {

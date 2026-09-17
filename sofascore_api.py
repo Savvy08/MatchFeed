@@ -6,19 +6,32 @@ Zero rate limits, real-time data, Russian translations.
 """
 
 import sys
+import io
 import json
+
+# Ensure UTF-8 output on Windows (fixes 'charmap' / cp1251 encode errors)
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 from curl_cffi import requests
 
 SESSION_HEADERS = {
     "Origin": "https://www.sofascore.com",
     "Referer": "https://www.sofascore.com/",
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
     "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "ru,en;q=0.9",
+    "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
 def get_session():
-    return requests.Session(impersonate="chrome110", headers=SESSION_HEADERS)
+    for imp in ["chrome124", "chrome120", "chrome110"]:
+        try:
+            return requests.Session(impersonate=imp, headers=SESSION_HEADERS)
+        except Exception:
+            continue
+    return requests.Session(headers=SESSION_HEADERS)
 
 def safe_dict(val):
     return val if isinstance(val, dict) else {}
