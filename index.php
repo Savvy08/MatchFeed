@@ -4,13 +4,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>MatchFeed — Live Scores & Статистика игроков</title>
+  <title>MatchFeed - Live Scores & Статистика игроков</title>
   <link rel="stylesheet" href="style.css?v=<?= time() ?>">
 </head>
 <body>
   <div class="app-container">
 
-    <!-- Global App Header -->
+    <!-- Шапка -->
     <header class="app-header">
       <div class="brand" onclick="openMatchesFeed()" style="cursor: pointer;">
         <div class="logo-badge" aria-hidden="true">
@@ -30,7 +30,7 @@
       </div>
     </header>
 
-    <!-- Error/Warning Banner -->
+    <!-- Баннер -->
     <div id="error-banner" class="banner hidden" role="alert">
       <div class="banner-content">
         <span class="banner-icon" aria-hidden="true"></span>
@@ -39,9 +39,9 @@
       <button id="banner-retry-btn" class="banner-action-btn" type="button">Повторить</button>
     </div>
 
-    <!-- ══ VIEW 1: MATCH FEED ══ -->
+    <!-- Лента матчей -->
     <div id="feed-view" class="app-view">
-      <!-- Sport Selector -->
+      <!-- Выбор спорта -->
       <div class="sub-nav">
         <div class="sport-tabs">
           <button class="sport-tab active" data-sport="table-tennis">
@@ -55,7 +55,7 @@
         </div>
       </div>
 
-      <!-- Status Filters -->
+      <!-- Фильтры -->
       <div class="filter-pills">
         <button class="pill active" data-status="all">Все</button>
         <button class="pill" data-status="live">
@@ -65,7 +65,7 @@
         <button class="pill" data-status="finished">Завершенные</button>
       </div>
 
-      <!-- Feed Content -->
+      <!-- Список матчей -->
       <main class="feed-content">
         <div id="matches-container">
           <div class="feed-loader">Загрузка событий...</div>
@@ -73,21 +73,22 @@
       </main>
     </div>
 
-    <!-- ══ VIEW 2: MATCH DETAILS ══ -->
+    <!-- Детали матча -->
     <div id="match-view" class="app-view hidden">
       <div class="view-sub-header">
-        <button class="view-back-btn" onclick="showView('feed')" aria-label="Назад к матчам">
+        <button class="view-back-btn" onclick="showView('feed')" aria-label="Назад">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-          <span>Матчи</span>
+          <span>Назад</span>
         </button>
-        <span id="match-view-header-title" class="view-header-title">Детали матча</span>
+        <span id="match-view-header-title" class="view-header-title">Матчи</span>
+        <div style="width: 72px;" aria-hidden="true"></div>
       </div>
       <div id="match-details-container" class="view-body">
         <div class="feed-loader">Загрузка данных матча...</div>
       </div>
     </div>
 
-    <!-- ══ VIEW 3: PLAYER PROFILE & STATS ══ -->
+    <!-- Профиль игрока -->
     <div id="player-view" class="app-view hidden">
       <div class="view-sub-header">
         <button class="view-back-btn" onclick="goBackFromPlayer()" aria-label="Назад">
@@ -95,9 +96,10 @@
           <span id="player-back-label">Назад</span>
         </button>
         <span id="player-view-header-title" class="view-header-title">Профиль игрока</span>
+        <div style="width: 72px;" aria-hidden="true"></div>
       </div>
 
-      <!-- Light search bar -->
+      <!-- Поиск игрока -->
       <div class="player-search-bar">
         <div class="search-box">
           <svg class="search-box-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
@@ -105,10 +107,10 @@
         </div>
       </div>
 
-      <!-- Search results -->
+      <!-- Результаты поиска -->
       <div id="player-search-results" class="player-search-dropdown hidden"></div>
 
-      <!-- Player Content: profile, statistics, match history -->
+      <!-- Контент профиля -->
       <div id="player-view-content" class="view-body">
         <div class="player-empty-prompt">
           <div class="empty-state-icon">
@@ -120,7 +122,7 @@
       </div>
     </div>
 
-    <!-- Bottom Navigation Bar -->
+    <!-- Нижнее меню -->
     <nav class="bottom-bar">
       <button class="nav-item active" id="nav-matches-btn" onclick="openMatchesFeed()" aria-label="Матчи">
         <?= getIcon('list', ['size' => 20, 'class' => 'nav-icon']) ?>
@@ -140,7 +142,7 @@
       </button>
     </nav>
 
-    <!-- Info Modal -->
+    <!-- Модальное окно инфо -->
     <div id="info-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="info-modal-title" onclick="handleBackdropClick(event)">
       <div class="modal-card">
         <div class="modal-header">

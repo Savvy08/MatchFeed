@@ -7,6 +7,7 @@ cache/
 php/
 launcher_config.txt
 cloudflared.exe
+windows-launcher/
 __pycache__/
 *.py[cod]
 *$py.class
@@ -22,3 +23,11 @@ Thumbs.db
 
 # External reference packages
 Public-Sofascore-API-main/
+
+# Project docs and archives
+AGENTS.md
+README.md
+readme.md
+index.html.arhive
+index.html.archive
+

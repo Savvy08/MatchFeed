@@ -6,6 +6,8 @@
  * Features: Live matches, Player search, Player profile & stats, Match details.
  */
 
+ini_set('display_errors', '0');
+
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
@@ -153,7 +155,34 @@ function setCache(string $key, array $data): void {
     @file_put_contents($file, json_encode($data, JSON_UNESCAPED_UNICODE));
 }
 
-// ─── ACTION: IMAGE ────────────────────────────────────────────────────────────
+function getImageMimeType(string $path): string {
+    if (function_exists('mime_content_type')) {
+        $mime = @mime_content_type($path);
+        if ($mime && strpos($mime, 'image/') === 0) {
+            return $mime;
+        }
+    }
+    $fp = @fopen($path, 'rb');
+    if ($fp) {
+        $header = fread($fp, 12);
+        fclose($fp);
+        if (substr($header, 0, 4) === 'RIFF' && substr($header, 8, 4) === 'WEBP') {
+            return 'image/webp';
+        }
+        if (substr($header, 0, 8) === "\x89PNG\r\n\x1a\n") {
+            return 'image/png';
+        }
+        if (substr($header, 0, 3) === "\xFF\xD8\xFF") {
+            return 'image/jpeg';
+        }
+        if (substr($header, 0, 6) === "GIF87a" || substr($header, 0, 6) === "GIF89a") {
+            return 'image/gif';
+        }
+    }
+    return 'image/png';
+}
+
+// Action: image
 if ($action === 'image') {
     $id = (int)($_GET['id'] ?? 0);
     if ($id <= 0) {
@@ -168,7 +197,7 @@ if ($action === 'image') {
 
     $cacheFile = "{$imgDir}/{$id}.png";
     if (file_exists($cacheFile) && filesize($cacheFile) > 0 && (time() - filemtime($cacheFile) < 86400 * 7)) {
-        header('Content-Type: image/png');
+        header('Content-Type: ' . getImageMimeType($cacheFile));
         header('Cache-Control: public, max-age=604800');
         readfile($cacheFile);
         exit;
@@ -191,7 +220,6 @@ if ($action === 'image') {
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $cType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
         if ($cType) $contentType = $cType;
-        curl_close($ch);
         if ($code !== 200) $imgData = null;
     }
 
@@ -212,7 +240,7 @@ if ($action === 'image') {
     if (!$imgData) {
         runPython(['image', (string)$id, $cacheFile]);
         if (file_exists($cacheFile) && filesize($cacheFile) > 0) {
-            header('Content-Type: image/png');
+            header('Content-Type: ' . getImageMimeType($cacheFile));
             header('Cache-Control: public, max-age=604800');
             readfile($cacheFile);
             exit;
@@ -221,7 +249,7 @@ if ($action === 'image') {
 
     if ($imgData && strlen($imgData) > 0) {
         @file_put_contents($cacheFile, $imgData);
-        header('Content-Type: ' . $contentType);
+        header('Content-Type: ' . getImageMimeType($cacheFile));
         header('Cache-Control: public, max-age=604800');
         echo $imgData;
         exit;
@@ -233,7 +261,7 @@ if ($action === 'image') {
     exit;
 }
 
-// ─── ACTION: LIVE ─────────────────────────────────────────────────────────────
+// Action: live
 if ($action === 'live') {
     $sport = strtolower(trim($_GET['sport'] ?? 'table-tennis'));
     if (!in_array($sport, ['table-tennis', 'football', 'tennis'])) {
@@ -266,7 +294,7 @@ if ($action === 'live') {
     exit;
 }
 
-// ─── ACTION: SEARCH ───────────────────────────────────────────────────────────
+// Action: search
 if ($action === 'search') {
     $q = trim($_GET['q'] ?? '');
     $qLen = function_exists('mb_strlen') ? mb_strlen($q) : strlen($q);
@@ -291,7 +319,7 @@ if ($action === 'search') {
     exit;
 }
 
-// ─── ACTION: PLAYER ───────────────────────────────────────────────────────────
+// Action: player
 if ($action === 'player' || $action === 'history') {
     $id = (int)($_GET['id'] ?? 0);
     $page = max(0, (int)($_GET['page'] ?? 0));
@@ -316,7 +344,7 @@ if ($action === 'player' || $action === 'history') {
     exit;
 }
 
-// ─── ACTION: EVENT (MATCH DETAILS) ────────────────────────────────────────────
+// Action: event (match details)
 if ($action === 'event' || $action === 'match') {
     $id = (int)($_GET['id'] ?? 0);
     if ($id <= 0) {
