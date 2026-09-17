@@ -12,16 +12,22 @@
 
     <!-- Global App Header -->
     <header class="app-header">
-      <div class="brand" onclick="showView('feed')" style="cursor: pointer;">
+      <div class="brand" onclick="openMatchesFeed()" style="cursor: pointer;">
         <div class="logo-badge" aria-hidden="true">
           <?= getIcon('trophy', ['size' => 16]) ?>
         </div>
         <span class="brand-title">MatchFeed</span>
       </div>
-      <button id="refresh-btn" class="refresh-btn" aria-label="Обновить счёт">
-        <?= getIcon('refresh', ['size' => 14, 'class' => 'icon-refresh']) ?>
-        <span class="refresh-text">Обновить</span>
-      </button>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button id="theme-toggle-btn" class="theme-toggle-btn" onclick="toggleDarkMode()" aria-label="Сменить тему" title="Тёмная/светлая тема">
+          <svg id="theme-icon-moon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+          <svg id="theme-icon-sun" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+        </button>
+        <button id="refresh-btn" class="refresh-btn" aria-label="Обновить счёт">
+          <?= getIcon('refresh', ['size' => 14, 'class' => 'icon-refresh']) ?>
+          <span class="refresh-text">Обновить</span>
+        </button>
+      </div>
     </header>
 
     <!-- Error/Warning Banner -->
@@ -57,10 +63,6 @@
           <span>Live</span>
         </button>
         <button class="pill" data-status="finished">Завершенные</button>
-        <button class="pill" data-status="favorites">
-          <?= getIcon('star', ['size' => 13]) ?>
-          <span>Избранное</span>
-        </button>
       </div>
 
       <!-- Feed Content -->
@@ -120,7 +122,7 @@
 
     <!-- Bottom Navigation Bar -->
     <nav class="bottom-bar">
-      <button class="nav-item active" id="nav-matches-btn" onclick="showView('feed')" aria-label="Матчи">
+      <button class="nav-item active" id="nav-matches-btn" onclick="openMatchesFeed()" aria-label="Матчи">
         <?= getIcon('list', ['size' => 20, 'class' => 'nav-icon']) ?>
         <span>Матчи</span>
       </button>
@@ -150,19 +152,11 @@
         <div class="modal-body">
           <div class="modal-info-row">
             <span class="modal-info-label">Версия</span>
-            <span class="modal-info-value">v2.0 (Настольный теннис + Футбол)</span>
-          </div>
-          <div class="modal-info-row">
-            <span class="modal-info-label">Стек</span>
-            <span class="modal-info-value">PHP + Python curl_cffi + Vanilla JS</span>
+            <span class="modal-info-value">v2.0</span>
           </div>
           <div class="modal-info-row">
             <span class="modal-info-label">Источник данных</span>
-            <span class="modal-info-value">SofaScore Direct (без лимитов)</span>
-          </div>
-          <div class="modal-info-row">
-            <span class="modal-info-label">Статистика игрока</span>
-            <span class="modal-info-value">Счёт по сетам, очки (до 11), винрейт</span>
+            <span class="modal-info-value">SofaScore</span>
           </div>
           <div class="modal-info-row">
             <span class="modal-info-label">Авто-обновление</span>

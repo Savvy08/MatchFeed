@@ -4,6 +4,9 @@
 
 # Cache and temporary data
 cache/
+php/
+launcher_config.txt
+cloudflared.exe
 __pycache__/
 *.py[cod]
 *$py.class

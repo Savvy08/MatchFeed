@@ -1145,3 +1145,562 @@ body {
 .sets-table td.set-score.loser {
   color: #4B5563;
 }
+
+/* ─── Team/Player Avatar in Match Detail ─────────────────────────────────────*/
+.team-avatar-img {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: #F3F4F6;
+  border: 1px solid #E5E7EB;
+  padding: 3px;
+  margin-bottom: 6px;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  flex-shrink: 0;
+  transition: opacity 0.2s;
+}
+
+.search-avatar-img {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: #F3F4F6;
+  border: 1px solid #E5E7EB;
+  padding: 2px;
+  flex-shrink: 0;
+  transition: opacity 0.2s;
+}
+
+.player-link-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 10px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: inherit;
+  gap: 2px;
+  transition: background 0.15s;
+  width: 100%;
+  max-width: 140px;
+}
+
+.player-link-btn:hover {
+  background: rgba(0,0,0,0.04);
+}
+
+.player-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  line-height: 1.3;
+  text-align: center;
+  word-break: break-word;
+}
+
+.player-name-plain {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px;
+  text-align: center;
+  color: #111827;
+  word-break: break-word;
+}
+
+/* ─── Theme Toggle Button ─────────────────────────────────────────────────────*/
+.theme-toggle-btn {
+  background: #F3F4F6;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.theme-toggle-btn:hover {
+  background: #E5E7EB;
+  color: #111827;
+}
+
+/* ─── Dark Mode Overrides (Full App) ────────────────────────────────────────── */
+body.dark-mode {
+  background-color: #0B1120;
+  color: #E2E8F0;
+}
+
+body.dark-mode .app-container {
+  background: #111827;
+  box-shadow: 0 0 30px rgba(0,0,0,0.6);
+}
+
+/* Header */
+body.dark-mode .app-header {
+  background: #111827;
+  border-bottom-color: #1F2937;
+}
+
+body.dark-mode .brand-title {
+  color: #F8FAFC;
+}
+
+body.dark-mode .logo-badge {
+  background: #2563EB;
+  color: #FFFFFF;
+}
+
+body.dark-mode .refresh-btn,
+body.dark-mode .theme-toggle-btn {
+  background: #1F2937;
+  border-color: #374151;
+  color: #E2E8F0;
+}
+
+body.dark-mode .refresh-btn:hover,
+body.dark-mode .theme-toggle-btn:hover {
+  background: #374151;
+}
+
+body.dark-mode .banner {
+  border-color: #1F2937;
+}
+
+/* Sub-nav & Tabs */
+body.dark-mode .sub-nav {
+  background: #111827;
+  border-bottom-color: #1F2937;
+}
+
+body.dark-mode .sport-tabs {
+  background: #0B1120;
+  border: 1px solid #1F2937;
+}
+
+body.dark-mode .sport-tab {
+  color: #94A3B8;
+  border: none;
+  background: transparent;
+}
+
+body.dark-mode .sport-tab:hover {
+  background: #1F2937;
+  color: #F1F5F9;
+}
+
+body.dark-mode .sport-tab.active {
+  background: #1F2937;
+  color: #60A5FA;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
+
+/* Sport Badges in Search & Lists */
+.sport-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.2px;
+}
+
+.sport-badge.table-tennis,
+.sport-badge.tennis {
+  background: #EFF6FF;
+  color: #2563EB;
+}
+
+.sport-badge.football {
+  background: #ECFDF5;
+  color: #059669;
+}
+
+body.dark-mode .sport-badge.table-tennis,
+body.dark-mode .sport-badge.tennis {
+  background: #1E3A8A;
+  color: #93C5FD;
+}
+
+body.dark-mode .sport-badge.football {
+  background: #064E3B;
+  color: #6EE7B7;
+}
+
+/* Filter Pills */
+body.dark-mode .filter-pills {
+  background: #111827;
+  border-bottom-color: #1F2937;
+}
+
+body.dark-mode .pill {
+  background: #1F2937;
+  color: #94A3B8;
+  border: 1px solid #374151;
+}
+
+body.dark-mode .pill:hover {
+  background: #374151;
+  color: #F8FAFC;
+}
+
+body.dark-mode .pill.active {
+  background: #F8FAFC;
+  color: #0F172A;
+  border-color: #F8FAFC;
+}
+
+/* Feed & League Groups */
+body.dark-mode .feed-content {
+  background: #0B1120;
+}
+
+body.dark-mode .league-group {
+  background: #111827;
+  border-top-color: #1F2937;
+  border-bottom-color: #1F2937;
+}
+
+body.dark-mode .league-header {
+  background: #182234;
+  color: #94A3B8;
+  border-bottom-color: #1F2937;
+}
+
+body.dark-mode .match-row {
+  border-bottom-color: #1F2937;
+}
+
+body.dark-mode .match-row:hover {
+  background: #1A2438;
+}
+
+body.dark-mode .team-line {
+  color: #F1F5F9;
+}
+
+body.dark-mode .team-score {
+  color: #F8FAFC;
+}
+
+body.dark-mode .match-time {
+  color: #94A3B8;
+}
+
+body.dark-mode .empty-state-title {
+  color: #F1F5F9;
+}
+
+body.dark-mode .empty-state-desc,
+body.dark-mode .feed-loader {
+  color: #94A3B8;
+}
+
+/* View Sub-Headers & Body */
+body.dark-mode .view-sub-header {
+  background: #111827;
+  border-bottom-color: #1F2937;
+}
+
+body.dark-mode .view-header-title {
+  color: #F8FAFC;
+}
+
+body.dark-mode .view-back-btn {
+  background: #1F2937;
+  border-color: #374151;
+  color: #E2E8F0;
+}
+
+body.dark-mode .view-back-btn:hover {
+  background: #374151;
+  color: #FFFFFF;
+}
+
+body.dark-mode .view-body {
+  background: #0B1120;
+}
+
+/* Match Detail Card */
+body.dark-mode .match-detail-card {
+  background: #111827;
+  border-color: #1F2937;
+}
+
+body.dark-mode .match-detail-header {
+  border-bottom-color: #1F2937;
+}
+
+body.dark-mode .match-tourn-title {
+  color: #94A3B8;
+}
+
+body.dark-mode .match-status-pill.finished {
+  background: #1F2937;
+  color: #CBD5E1;
+}
+
+body.dark-mode .scoreboard-box {
+  background: #182234;
+  border-color: #1F2937;
+}
+
+body.dark-mode .scoreboard-score {
+  color: #F8FAFC;
+}
+
+body.dark-mode .player-link-btn {
+  color: #F1F5F9;
+}
+
+body.dark-mode .player-link-btn:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+body.dark-mode .player-name-plain,
+body.dark-mode .player-card-name {
+  color: #F1F5F9;
+}
+
+body.dark-mode .team-avatar-img,
+body.dark-mode .search-avatar-img {
+  background: #1F2937;
+  border-color: #374151;
+}
+
+body.dark-mode .sets-table-box {
+  background: #182234;
+  border-color: #1F2937;
+}
+
+body.dark-mode .sets-table th {
+  background: #111827;
+  color: #94A3B8;
+  border-bottom-color: #1F2937;
+}
+
+body.dark-mode .sets-table td {
+  border-bottom-color: #1F2937;
+  color: #E2E8F0;
+}
+
+body.dark-mode .sets-table td.team-cell {
+  color: #F1F5F9;
+}
+
+body.dark-mode .sets-table td.set-score.winner {
+  background: #14532D;
+  color: #86EFAC;
+}
+
+body.dark-mode .sets-table td.set-score.loser {
+  color: #64748B;
+}
+
+/* Player Search & Dropdown */
+body.dark-mode .player-search-bar {
+  background: #111827;
+  border-bottom-color: #1F2937;
+}
+
+body.dark-mode .search-box {
+  background: #0B1120;
+  border-color: #374151;
+}
+
+body.dark-mode .search-box:focus-within {
+  background: #0B1120;
+  border-color: #3B82F6;
+}
+
+body.dark-mode .player-search-input {
+  background: transparent;
+  color: #F8FAFC;
+}
+
+body.dark-mode .player-search-dropdown {
+  background: #111827;
+  border-color: #1F2937;
+}
+
+body.dark-mode .player-search-item {
+  background: #111827;
+  border-bottom-color: #1F2937;
+  color: #F1F5F9;
+}
+
+body.dark-mode .player-search-item:hover {
+  background: #1F2937;
+}
+
+body.dark-mode .search-item-name {
+  color: #F8FAFC;
+}
+
+body.dark-mode .search-item-meta {
+  color: #94A3B8;
+}
+
+/* Player Profile Card & Stats */
+body.dark-mode .player-profile-card {
+  background: #111827;
+  border-color: #1F2937;
+}
+
+body.dark-mode .player-title-name {
+  color: #F8FAFC;
+}
+
+body.dark-mode .player-meta-info {
+  color: #94A3B8;
+}
+
+body.dark-mode .stats-grid {
+  border-top-color: #1F2937;
+}
+
+body.dark-mode .stat-box {
+  background: #182234;
+  border-color: #1F2937;
+}
+
+body.dark-mode .stat-val.stat-total {
+  color: #F8FAFC;
+}
+
+body.dark-mode .stat-lbl {
+  color: #94A3B8;
+}
+
+body.dark-mode .points-summary-bar {
+  background: #182234;
+  color: #94A3B8;
+}
+
+body.dark-mode .points-summary-bar strong {
+  color: #F8FAFC;
+}
+
+/* Player Matches History */
+body.dark-mode .section-heading {
+  color: #94A3B8;
+}
+
+body.dark-mode .player-match-card {
+  background: #111827;
+  border-color: #1F2937;
+}
+
+body.dark-mode .player-match-card:hover {
+  background: #1A2438;
+  border-color: #374151;
+}
+
+body.dark-mode .opp-name {
+  color: #F8FAFC;
+}
+
+body.dark-mode .set-chip.chip-loss {
+  background: #1F2937;
+  border-color: #374151;
+  color: #94A3B8;
+}
+
+body.dark-mode .match-card-bottom {
+  border-top-color: #1F2937;
+  color: #64748B;
+}
+
+body.dark-mode .load-more-btn {
+  background: #1F2937;
+  border-color: #374151;
+  color: #E2E8F0;
+}
+
+body.dark-mode .load-more-btn:hover {
+  background: #374151;
+  color: #FFFFFF;
+}
+
+body.dark-mode .player-empty-prompt {
+  color: #94A3B8;
+}
+
+/* Bottom Bar */
+body.dark-mode .bottom-bar {
+  background: #111827;
+  border-top-color: #1F2937;
+}
+
+body.dark-mode .nav-item {
+  color: #64748B;
+}
+
+body.dark-mode .nav-item.active {
+  color: #60A5FA;
+}
+
+/* Info Modal */
+body.dark-mode .modal-backdrop {
+  background: rgba(0,0,0,0.75);
+}
+
+body.dark-mode .modal-card {
+  background: #111827;
+  border-color: #1F2937;
+}
+
+body.dark-mode .modal-header {
+  border-bottom-color: #1F2937;
+}
+
+body.dark-mode .modal-title {
+  color: #F8FAFC;
+}
+
+body.dark-mode .modal-close-btn {
+  background: #1F2937;
+  color: #94A3B8;
+}
+
+body.dark-mode .modal-close-btn:hover {
+  background: #374151;
+  color: #F8FAFC;
+}
+
+body.dark-mode .modal-info-row {
+  border-bottom-color: #1F2937;
+}
+
+body.dark-mode .modal-info-label {
+  color: #94A3B8;
+}
+
+body.dark-mode .modal-info-value {
+  color: #F8FAFC;
+}
+
+body.dark-mode .modal-footer {
+  border-top-color: #1F2937;
+}
+
+body.dark-mode .modal-btn-close {
+  background: #2563EB;
+  color: #FFFFFF;
+}
+
+body.dark-mode .modal-btn-close:active {
+  background: #1D4ED8;
+}

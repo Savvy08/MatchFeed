@@ -15,6 +15,26 @@ let currentPlayerName = '';
 let currentPlayerPage = 0;
 let playerMatchesDone = false;
 
+// ─── Dark Mode ────────────────────────────────────────────────────────────────
+function initDarkMode() {
+  const isDark = localStorage.getItem('matchfeed_dark') === '1';
+  if (isDark) applyDark(true);
+}
+
+function toggleDarkMode() {
+  const isDark = document.body.classList.contains('dark-mode');
+  applyDark(!isDark);
+  localStorage.setItem('matchfeed_dark', isDark ? '0' : '1');
+}
+
+function applyDark(on) {
+  document.body.classList.toggle('dark-mode', on);
+  const moon = document.getElementById('theme-icon-moon');
+  const sun = document.getElementById('theme-icon-sun');
+  if (moon) moon.style.display = on ? 'none' : '';
+  if (sun) sun.style.display = on ? '' : 'none';
+}
+
 // ─── Web Audio API Sound ──────────────────────────────────────────────────────
 function playGoalSound() {
   try {
@@ -100,27 +120,58 @@ function showView(viewName) {
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
 
+function openMatchesFeed() {
+  currentStatus = 'all';
+  document.querySelectorAll('.pill').forEach(p => {
+    p.classList.toggle('active', p.dataset.status === 'all');
+  });
+  showView('feed');
+  renderMatches();
+}
+
 function showFavorites() {
   currentStatus = 'favorites';
   document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
-  document.querySelector('.pill[data-status="favorites"]')?.classList.add('active');
   showView('feed');
   renderMatches();
 }
 
 function openPlayerTab() {
   showView('player');
-  if (!currentPlayerId) {
-    const input = document.getElementById('player-search-input');
-    if (input) input.focus();
+  resetPlayerViewToSearch();
+}
+
+function resetPlayerViewToSearch() {
+  currentPlayerId = null;
+  currentPlayerName = '';
+  const titleEl = document.getElementById('player-view-header-title');
+  if (titleEl) titleEl.textContent = 'Поиск игрока';
+  const content = document.getElementById('player-view-content');
+  if (content) {
+    content.innerHTML = `
+      <div class="player-empty-prompt">
+        <div class="empty-state-icon">
+          <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+        </div>
+        <div class="empty-state-title">Поиск игрока</div>
+        <div class="empty-state-desc">Введите имя игрока или название команды в строке поиска.</div>
+      </div>
+    `;
+  }
+  const input = document.getElementById('player-search-input');
+  if (input) {
+    input.value = '';
+    input.focus();
   }
 }
 
 function goBackFromPlayer() {
-  if (previousView === 'match') {
+  if (currentPlayerId && previousView !== 'match') {
+    resetPlayerViewToSearch();
+  } else if (previousView === 'match') {
     showView('match');
   } else {
-    showView('feed');
+    openMatchesFeed();
   }
 }
 
@@ -366,32 +417,45 @@ async function openMatchDetail(matchId) {
 
     const homeTeam = data.homeTeam || {};
     const awayTeam = data.awayTeam || {};
-    const homeName = homeTeam.name || 'Игрок 1';
-    const awayName = awayTeam.name || 'Игрок 2';
+    const homeName = homeTeam.name || 'Команда 1';
+    const awayName = awayTeam.name || 'Команда 2';
     const homeId = homeTeam.id || 0;
     const awayId = awayTeam.id || 0;
     const homeSets = homeTeam.sets !== null && homeTeam.sets !== undefined ? homeTeam.sets : '-';
     const awaySets = awayTeam.sets !== null && awayTeam.sets !== undefined ? awayTeam.sets : '-';
     const statusClass = data.isLive ? 'live' : 'finished';
 
-    // Sets table rows
-    let setsHeaders = '<th>Игрок</th>';
+    // Определяем вид спорта
+    const isFootball = (data.sport === 'football') || (currentSport === 'football');
+    const periodLabel = isFootball
+      ? ['1-й тайм', '2-й тайм', 'Доп. время', 'Пенальти']
+      : null;
+
+    // Таблица периодов/сетов
+    let setsHeaders = `<th>${isFootball ? 'Команда' : 'Игрок'}</th>`;
     let homeRow = `<td class="team-cell">${escapeHtml(homeName)}</td>`;
     let awayRow = `<td class="team-cell">${escapeHtml(awayName)}</td>`;
 
     const sets = Array.isArray(data.sets) ? data.sets : [];
     sets.forEach((s, idx) => {
-      setsHeaders += `<th>Сет ${idx + 1}</th>`;
+      const label = periodLabel ? (periodLabel[idx] || `Период ${idx + 1}`) : `Сет ${idx + 1}`;
+      setsHeaders += `<th>${label}</th>`;
       const hp = s.home !== null && s.home !== undefined ? s.home : '-';
       const ap = s.away !== null && s.away !== undefined ? s.away : '-';
-      const homeWon = s.homeWon === true;
-      const awayWon = s.homeWon === false;
 
-      homeRow += `<td class="set-score ${homeWon ? 'winner' : 'loser'}">${hp}</td>`;
-      awayRow += `<td class="set-score ${awayWon ? 'winner' : 'loser'}">${ap}</td>`;
+      if (isFootball) {
+        homeRow += `<td class="set-score">${hp}</td>`;
+        awayRow += `<td class="set-score">${ap}</td>`;
+      } else {
+        const homeWon = s.homeWon === true;
+        const awayWon = s.homeWon === false;
+        homeRow += `<td class="set-score ${homeWon ? 'winner' : 'loser'}">${hp}</td>`;
+        awayRow += `<td class="set-score ${awayWon ? 'winner' : 'loser'}">${ap}</td>`;
+      }
     });
 
-    setsHeaders += '<th>Итог</th>';
+    const totalLabel = isFootball ? 'Итог' : 'Итог';
+    setsHeaders += `<th>${totalLabel}</th>`;
     homeRow += `<td class="set-score" style="font-weight:800;">${homeSets}</td>`;
     awayRow += `<td class="set-score" style="font-weight:800;">${awaySets}</td>`;
 
@@ -407,23 +471,25 @@ async function openMatchDetail(matchId) {
       </div>
     ` : '';
 
-    const homeBtnHtml = homeId ? `
-      <button class="player-link-btn" onclick="openPlayerProfile(${homeId}, '${escapeJs(homeName)}')">
-        <div>
-          <div>${escapeHtml(homeName)}</div>
-          <span class="player-link-pill">Профиль игрока</span>
-        </div>
-      </button>
-    ` : `<div style="font-size:14px; font-weight:600; padding:8px;">${escapeHtml(homeName)}</div>`;
+    // Карточки команд/игроков с фото через локальный прокси
+    const homeImgUrl = homeId ? `api.php?action=image&id=${homeId}` : '';
+    const awayImgUrl = awayId ? `api.php?action=image&id=${awayId}` : '';
 
-    const awayBtnHtml = awayId ? `
-      <button class="player-link-btn" onclick="openPlayerProfile(${awayId}, '${escapeJs(awayName)}')">
-        <div>
-          <div>${escapeHtml(awayName)}</div>
-          <span class="player-link-pill">Профиль игрока</span>
-        </div>
+    const homeCard = homeId ? `
+      <button class="player-link-btn" onclick="openPlayerProfile(${homeId}, '${escapeJs(homeName)}')">
+        <img src="${homeImgUrl}" class="team-avatar-img" alt="" onerror="this.style.opacity='0.2'">
+        <div class="player-card-name">${escapeHtml(homeName)}</div>
+        ${!isFootball ? '<span class="player-link-pill">Профиль игрока</span>' : ''}
       </button>
-    ` : `<div style="font-size:14px; font-weight:600; padding:8px;">${escapeHtml(awayName)}</div>`;
+    ` : `<div class="player-name-plain">${escapeHtml(homeName)}</div>`;
+
+    const awayCard = awayId ? `
+      <button class="player-link-btn" onclick="openPlayerProfile(${awayId}, '${escapeJs(awayName)}')">
+        <img src="${awayImgUrl}" class="team-avatar-img" alt="" onerror="this.style.opacity='0.2'">
+        <div class="player-card-name">${escapeHtml(awayName)}</div>
+        ${!isFootball ? '<span class="player-link-pill">Профиль игрока</span>' : ''}
+      </button>
+    ` : `<div class="player-name-plain">${escapeHtml(awayName)}</div>`;
 
     const html = `
       <div class="match-detail-card">
@@ -434,7 +500,7 @@ async function openMatchDetail(matchId) {
 
         <div class="scoreboard-box">
           <div class="scoreboard-side">
-            ${homeBtnHtml}
+            ${homeCard}
             <div class="scoreboard-score">${homeSets}</div>
           </div>
 
@@ -442,7 +508,7 @@ async function openMatchDetail(matchId) {
 
           <div class="scoreboard-side">
             <div class="scoreboard-score">${awaySets}</div>
-            ${awayBtnHtml}
+            ${awayCard}
           </div>
         </div>
 
@@ -469,6 +535,7 @@ async function openMatchDetail(matchId) {
   }
 }
 
+
 // ─── Player Profile & History View ────────────────────────────────────────────
 function onPlayerSearchInput(val) {
   clearTimeout(playerSearchTimer);
@@ -493,11 +560,22 @@ function onPlayerSearchInput(val) {
 
       let dHtml = '';
       data.players.slice(0, 8).forEach(p => {
+        const isFoot = p.sport === 'football';
+        const sportBadge = isFoot
+          ? '<span class="sport-badge football">Футбол</span>'
+          : '<span class="sport-badge table-tennis">Н. теннис</span>';
+
         dHtml += `
           <button class="player-search-item" onclick="selectSearchedPlayer(${p.id}, '${escapeJs(p.name)}')">
-            <div>
-              <div class="search-item-name">${escapeHtml(p.name)}</div>
-              <div class="search-item-meta">${escapeHtml(p.country || p.sport || '')}</div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <img src="api.php?action=image&id=${p.id}" class="search-avatar-img" alt="" onerror="this.style.opacity='0.2'">
+              <div>
+                <div class="search-item-name">${escapeHtml(p.name)}</div>
+                <div class="search-item-meta" style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+                  ${sportBadge}
+                  <span>${escapeHtml(p.country || '')}</span>
+                </div>
+              </div>
             </div>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#9CA3AF" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
           </button>
@@ -561,8 +639,9 @@ async function openPlayerProfile(playerId, playerName) {
 
     let html = `
       <div class="player-profile-card">
-        <div class="player-profile-top">
-          <div>
+        <div class="player-profile-top" style="display:flex;align-items:center;gap:12px;">
+          <img src="api.php?action=image&id=${playerId}" class="team-avatar-img" style="margin:0;width:52px;height:52px;" alt="" onerror="this.style.opacity='0.2'">
+          <div style="flex:1;min-width:0;">
             <div class="player-title-name">${escapeHtml(prof.name)}</div>
             <div class="player-meta-info">
               <span>${countryStr}</span>
@@ -788,6 +867,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Initial load
+  initDarkMode();
   fetchMatches();
 
   // Auto-refresh every 30s only on feed view

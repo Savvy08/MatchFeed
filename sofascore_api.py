@@ -6,19 +6,32 @@ Zero rate limits, real-time data, Russian translations.
 """
 
 import sys
+import io
 import json
+
+# Ensure UTF-8 output on Windows (fixes 'charmap' / cp1251 encode errors)
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 from curl_cffi import requests
 
 SESSION_HEADERS = {
     "Origin": "https://www.sofascore.com",
     "Referer": "https://www.sofascore.com/",
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
     "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "ru,en;q=0.9",
+    "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
 def get_session():
-    return requests.Session(impersonate="chrome110", headers=SESSION_HEADERS)
+    for imp in ["chrome124", "chrome120", "chrome110"]:
+        try:
+            return requests.Session(impersonate=imp, headers=SESSION_HEADERS)
+        except Exception:
+            continue
+    return requests.Session(headers=SESSION_HEADERS)
 
 def safe_dict(val):
     return val if isinstance(val, dict) else {}
@@ -335,6 +348,8 @@ def handle_event(event_id):
 
             tourn = safe_dict(ev.get("tournament"))
             cat = safe_dict(tourn.get("category"))
+            sport_data = safe_dict(cat.get("sport")) or safe_dict(tourn.get("sport"))
+            sport_slug = sport_data.get("slug", "")
             round_info = safe_dict(ev.get("roundInfo"))
             home_team = safe_dict(ev.get("homeTeam"))
             away_team = safe_dict(ev.get("awayTeam"))
@@ -342,6 +357,7 @@ def handle_event(event_id):
             result = {
                 "success": True,
                 "id": str(ev.get("id", event_id)),
+                "sport": sport_slug,
                 "date": dt_str,
                 "startTimestamp": ts,
                 "status": status_label,
@@ -366,6 +382,20 @@ def handle_event(event_id):
     except Exception as exc:
         print(json.dumps({"success": False, "error": str(exc)}, ensure_ascii=False))
 
+def handle_image(entity_id, save_path):
+    try:
+        url = f"https://img.sofascore.com/api/v1/team/{entity_id}/image"
+        with get_session() as s:
+            r = s.get(url, timeout=6)
+            if r.status_code == 200 and len(r.content) > 0:
+                with open(save_path, "wb") as f:
+                    f.write(r.content)
+                print(json.dumps({"success": True}))
+                return
+    except Exception as e:
+        pass
+    print(json.dumps({"success": False}))
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print(json.dumps({"error": "No action specified"}))
@@ -386,5 +416,9 @@ if __name__ == "__main__":
     elif action in ("event", "match"):
         eid = sys.argv[2] if len(sys.argv) > 2 else ""
         handle_event(eid)
+    elif action == "image":
+        iid = sys.argv[2] if len(sys.argv) > 2 else ""
+        spath = sys.argv[3] if len(sys.argv) > 3 else ""
+        handle_image(iid, spath)
     else:
         print(json.dumps({"error": f"Unknown action: {action}"}))
