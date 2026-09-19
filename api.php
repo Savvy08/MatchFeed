@@ -1,23 +1,5 @@
 <?php
 
-header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
-
-
-$rawAction = $_GET['action'] ?? 'NOT_FOUND';
-$debugMsg = "DEBUG: Получен action = '{$rawAction}' (тип: " . gettype($rawAction) . ")";
-
-if (!in_array(strtolower(trim($rawAction)), ['live', 'search', 'player', 'history', 'event', 'match'])) {
-    echo json_encode([
-        'success' => false, 
-        'error' => 'Неизвестное действие', 
-        'debug_info' => $debugMsg,
-        'full_get' => $_GET,
-        'server_uri' => $_SERVER['REQUEST_URI']
-    ]);
-    exit;
-}
-
 /**
  * MatchFeed API
  * Direct Sofascore access via sofascore_api.py (TLS impersonation)
@@ -125,13 +107,18 @@ if ($action === 'live') {
 
 // ─── ACTION: SEARCH ───────────────────────────────────────────────────────────
 if ($action === 'search') {
-    $q = trim($_GET['q'] ?? '');
+    $qRaw = $_GET['q'] ?? '';
+
+    $q = mb_substr(trim($qRaw),0,50);
+
+    $q = preg_replace('/[^A-Za-zA-Яа-яЁё0-9\s\-\']/u', '', $q);
+
     if (mb_strlen($q) < 2) {
-        echo json_encode(['success' => false, 'players' => []], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success' => false, 'players' => [], 'warning' => 'Слишком короткий или пустой запрос'], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
-    $cacheKey = "search_" . mb_strtolower($q);
+    $cacheKey = 'search_' . mb_strtolower($q);
     $cached = null;
 
     if ($cache instanceof Cache) {
