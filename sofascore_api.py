@@ -5,6 +5,8 @@ Direct Sofascore client using curl_cffi to bypass Cloudflare TLS fingerprinting.
 Zero rate limits, real-time data, Russian translations.
 """
 
+import time
+time.sleep(45)
 import sys
 import json
 from curl_cffi import requests

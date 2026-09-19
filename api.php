@@ -36,7 +36,7 @@ if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS
 
 $action = strtolower(trim($_GET['action'] ?? 'live'));
 
-function runPython(array $args): array {
+function runPython(array $args, int $timeoutSeconds = 40): array {
     $script = escapeshellarg(__DIR__ . '/sofascore_api.py');
     $cmdArgs = array_map('escapeshellarg', $args);
 
@@ -46,19 +46,60 @@ function runPython(array $args): array {
 
     // Suppress stderr to avoid environment/zsh warnings contaminating output
     $cmd = $pyBin . ' ' . $script . ' ' . implode(' ', $cmdArgs) . ' ' . $devNull;
-    $out = trim((string)shell_exec($cmd));
+    $descriptors = [
+        0 => ['pipe', 'r'],
+        1 => ['pipe', 'w'],
+        2 => ['pipe', 'w'],
+    ];
+
+    $process = proc_open($cmd, $descriptors, $pipes);
+    if (!is_resource($process)) {
+        return ['success' => false, 'error' => 'Не удалось запустить Python-процесс'];
+    }
+
+    $status = proc_get_status($process);
+    $pid = $status['pid'] ?? 0;
+
+    $startTime = microtime(true);
+    while (proc_get_status($process)['running']) {
+        usleep(100000);
+        $elapsed = microtime(true) - $startTime;
+        if ($elapsed >= $timeoutSeconds) {
+            if ($isWin) {
+                exec("taskkill /F /PID $pid 2>&1", $killOutput, $killReturn);
+            } else {
+                posix_kill($pid, SIGKILL);
+            }
+            proc_close($process);
+            return [
+                'success' => false,
+                'error' => 'Python-скрипт превысил лимит времени (' . $timeoutSeconds . 'сек)',
+                'debug' => 'Процес был принудительно завершён',
+            ];
+        }
+    }
+    $out = trim((string) stream_get_contents($pipes[1]));
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+    proc_close($process);
 
     $start = strpos($out, '{');
-    $end = strrpos($out, '}');
-    if ($start !== false && $end !== false && $end >= $start) {
-        $jsonStr = substr($out, $start, $end - $start + 1);
+    $end = strpos($out, '}');
+
+    if($start !== false && $end !== false && $end >= $start) {
+        $jsonStr = substr($out,$start,$end - $start + 1);
         $data = json_decode($jsonStr, true);
         if (is_array($data)) {
             return $data;
         }
     }
 
-    return ['success' => false, 'error' => 'Не удалось разобрать ответ сервера', 'raw' => substr($out, 0, 200)];
+    return [
+        'success' => false,
+        'error' => 'Не удалось разобрать ответ сервера',
+        'raw' => substr($out, 0, 200),
+    ];
+
 }
 
 // ─── ACTION: LIVE ─────────────────────────────────────────────────────────────
