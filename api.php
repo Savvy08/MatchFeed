@@ -1,10 +1,46 @@
 <?php
+
+header('Content-Type: application/json; charset=utf-8');
+header('Access-Control-Allow-Origin: *');
+
+
+$rawAction = $_GET['action'] ?? 'NOT_FOUND';
+$debugMsg = "DEBUG: Получен action = '{$rawAction}' (тип: " . gettype($rawAction) . ")";
+
+if (!in_array(strtolower(trim($rawAction)), ['live', 'search', 'player', 'history', 'event', 'match'])) {
+    echo json_encode([
+        'success' => false, 
+        'error' => 'Неизвестное действие', 
+        'debug_info' => $debugMsg,
+        'full_get' => $_GET,
+        'server_uri' => $_SERVER['REQUEST_URI']
+    ]);
+    exit;
+}
+
 /**
  * MatchFeed API
  * Direct Sofascore access via sofascore_api.py (TLS impersonation)
  * Multi-sport: Table Tennis (default), Football, Tennis.
  * Features: Live matches, Player search, Player profile & stats, Match details.
  */
+
+require_once __DIR__ . '/Cache.php';
+
+$cacheDir = dirname(__DIR__) . '/cache';
+
+try {
+    $cache = new Cache($cacheDir);
+} catch (Exception $e) {
+    error_log("Cache init error: ". $e->getMessage());
+    $cache = null;
+}
+
+$uri = parse_url($_SERVER['REQUEST_URI'],PHP_URL_PATH);
+if ($uri && str_starts_with(strtolower($uri), '/cache/')) {
+    http_response_code(403);
+    echo json_encode(['error' => 'Access denied']);
+}
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
@@ -17,10 +53,6 @@ if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS
 }
 
 $action = strtolower(trim($_GET['action'] ?? 'live'));
-$cacheDir = __DIR__ . '/cache';
-if (!is_dir($cacheDir)) {
-    @mkdir($cacheDir, 0777, true);
-}
 
 function runPython(array $args): array {
     $script = escapeshellarg(__DIR__ . '/sofascore_api.py');
@@ -47,30 +79,6 @@ function runPython(array $args): array {
     return ['success' => false, 'error' => 'Не удалось разобрать ответ сервера', 'raw' => substr($out, 0, 200)];
 }
 
-function getCache(string $key, int $ttl): ?array {
-    global $cacheDir;
-    $file = $cacheDir . '/' . md5($key) . '.json';
-    if (file_exists($file)) {
-        $age = time() - (filemtime($file) ?: 0);
-        if ($age < $ttl) {
-            $raw = @file_get_contents($file);
-            $json = json_decode($raw, true);
-            if (is_array($json)) {
-                $json['cached'] = true;
-                $json['cacheAge'] = $age;
-                return $json;
-            }
-        }
-    }
-    return null;
-}
-
-function setCache(string $key, array $data): void {
-    global $cacheDir;
-    $file = $cacheDir . '/' . md5($key) . '.json';
-    @file_put_contents($file, json_encode($data, JSON_UNESCAPED_UNICODE));
-}
-
 // ─── ACTION: LIVE ─────────────────────────────────────────────────────────────
 if ($action === 'live') {
     $sport = strtolower(trim($_GET['sport'] ?? 'table-tennis'));
@@ -79,7 +87,12 @@ if ($action === 'live') {
     }
 
     $cacheKey = "live_{$sport}";
-    $cached = getCache($cacheKey, 15);
+    $cached = null;
+
+    if ($cache instanceof Cache) {
+        $cached = $cache->get($cacheKey,15);
+    }
+
     if ($cached) {
         echo json_encode($cached, JSON_UNESCAPED_UNICODE);
         exit;
@@ -87,13 +100,19 @@ if ($action === 'live') {
 
     $data = runPython(['live', $sport]);
     if (!empty($data['success'])) {
-        setCache($cacheKey, $data);
+        if ($cache instanceof Cache) {
+            $cache->set($cacheKey, $data);
+        }
         echo json_encode($data, JSON_UNESCAPED_UNICODE);
         exit;
     }
 
     // Return stale cache if available
-    $stale = getCache($cacheKey, 3600);
+    $stale = null;
+    if ($cache instanceof Cache) {
+        $stale = $cache->get($cacheKey, 3600);
+    }
+
     if ($stale) {
         $stale['warning'] = 'Данные из кэша';
         echo json_encode($stale, JSON_UNESCAPED_UNICODE);
@@ -113,7 +132,12 @@ if ($action === 'search') {
     }
 
     $cacheKey = "search_" . mb_strtolower($q);
-    $cached = getCache($cacheKey, 300);
+    $cached = null;
+
+    if ($cache instanceof Cache) {
+        $cached = $cache->get($cacheKey,300);
+    }
+
     if ($cached) {
         echo json_encode($cached, JSON_UNESCAPED_UNICODE);
         exit;
@@ -121,7 +145,9 @@ if ($action === 'search') {
 
     $data = runPython(['search', $q]);
     if (!empty($data['success'])) {
-        setCache($cacheKey, $data);
+        if($cache instanceof Cache) {
+            $cache->set($cacheKey,$data);
+        }
     }
     echo json_encode($data, JSON_UNESCAPED_UNICODE);
     exit;
@@ -138,7 +164,12 @@ if ($action === 'player' || $action === 'history') {
     }
 
     $cacheKey = "player_{$id}_{$page}";
-    $cached = getCache($cacheKey, 180);
+    $cached = null;
+
+    if ($cache instanceof Cache) {
+        $cached = $cache->get($cacheKey,180);
+    }
+
     if ($cached) {
         echo json_encode($cached, JSON_UNESCAPED_UNICODE);
         exit;
@@ -146,7 +177,9 @@ if ($action === 'player' || $action === 'history') {
 
     $data = runPython(['player', (string)$id, (string)$page]);
     if (!empty($data['success'])) {
-        setCache($cacheKey, $data);
+        if ($cache instanceof Cache) {
+            $cache->set($cacheKey,$data);
+        }
     }
     echo json_encode($data, JSON_UNESCAPED_UNICODE);
     exit;
@@ -161,7 +194,12 @@ if ($action === 'event' || $action === 'match') {
     }
 
     $cacheKey = "event_{$id}";
-    $cached = getCache($cacheKey, 10);
+    $cached = null;
+
+    if ($cache instanceof Cache) {
+        $cached = $cache->get($cacheKey,10);
+    }
+
     if ($cached) {
         echo json_encode($cached, JSON_UNESCAPED_UNICODE);
         exit;
@@ -169,8 +207,9 @@ if ($action === 'event' || $action === 'match') {
 
     $data = runPython(['event', (string)$id]);
     if (!empty($data['success'])) {
-        $ttl = (!empty($data['isLive'])) ? 10 : 600;
-        setCache($cacheKey, $data);
+        if ($cache instanceof Cache) {
+            $cache->set($cacheKey,$data);
+        }
     }
     echo json_encode($data, JSON_UNESCAPED_UNICODE);
     exit;
