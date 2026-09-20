@@ -3113,6 +3113,7 @@ body.dark-mode .bracket-team-score {
   cursor: pointer;
   transition: all 0.15s ease;
   text-align: center;
+  white-space: nowrap;
 }
 
 .player-tab-btn:hover {
@@ -3239,9 +3240,8 @@ body.dark-mode .bracket-team-score {
   font-weight: 700;
   color: #111827;
   margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.3;
+  word-break: break-word;
 }
 
 .player-match-status-badge {
@@ -3276,6 +3276,7 @@ body.dark-mode .bracket-team-score {
   padding: 10px 12px;
   cursor: pointer;
   transition: all 0.15s ease;
+  gap: 10px;
 }
 
 .player-featured-match:hover {
@@ -3283,10 +3284,18 @@ body.dark-mode .bracket-team-score {
   border-color: #D1D5DB;
 }
 
+.featured-match-info {
+  flex: 1;
+  min-width: 0;
+}
+
 .featured-match-tourn {
   font-size: 11px;
   color: #6B7280;
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .featured-match-opp {
@@ -3294,6 +3303,9 @@ body.dark-mode .bracket-team-score {
   font-weight: 700;
   color: #111827;
   margin: 2px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .featured-match-time {
@@ -3310,6 +3322,8 @@ body.dark-mode .bracket-team-score {
   border: 1px solid #BFDBFE;
   border-radius: 6px;
   cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* Фильтры матчей */
@@ -3944,5 +3958,128 @@ body.dark-mode .media-news-date {
   color: #94A3B8;
 }
 
+/* Адаптивность профиля игрока под экраны Android */
+@media (max-width: 400px) {
+  .player-profile-card {
+    margin: 10px 12px;
+    padding: 14px;
+  }
 
+  .player-tab-content-body {
+    margin: 0 12px 20px;
+  }
 
+  .player-title-name {
+    font-size: 16px;
+    line-height: 1.25;
+    word-break: break-word;
+  }
+
+  .player-profile-top .team-avatar-img {
+    width: 46px !important;
+    height: 46px !important;
+  }
+
+  .player-rank-badge {
+    font-size: 11px;
+    padding: 3px 6px;
+  }
+
+  .player-tab-btn {
+    font-size: 12px;
+    padding: 7px 2px;
+  }
+
+  .player-section-header {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .player-info-grid {
+    gap: 8px;
+  }
+
+  .player-info-item {
+    padding: 6px 8px;
+  }
+
+  .player-info-val {
+    font-size: 12px;
+  }
+
+  .player-metric-row {
+    gap: 6px;
+  }
+
+  .player-metric-item {
+    padding: 8px 4px;
+  }
+
+  .player-metric-val {
+    font-size: 14px;
+  }
+
+  .player-metric-lbl {
+    font-size: 9px;
+  }
+}
+
+@media (max-width: 350px) {
+  .player-profile-card {
+    margin: 8px;
+    padding: 10px;
+  }
+
+  .player-tab-content-body {
+    margin: 0 8px 16px;
+  }
+
+  .player-tab-section {
+    padding: 10px;
+  }
+
+  .player-title-name {
+    font-size: 15px;
+  }
+
+  .player-profile-top {
+    gap: 8px !important;
+  }
+
+  .player-profile-top .team-avatar-img {
+    width: 40px !important;
+    height: 40px !important;
+  }
+
+  .player-tab-btn {
+    font-size: 11px;
+    padding: 6px 1px;
+  }
+
+  .player-form-row {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .player-form-badge {
+    width: 22px;
+    height: 22px;
+    font-size: 10px;
+  }
+
+  .player-featured-match {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .featured-match-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .player-filter-btn {
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+}
