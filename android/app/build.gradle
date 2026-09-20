@@ -33,22 +33,21 @@ def getSwvProperties() {
 def swvProps = getSwvProperties()
 
 android {
-	namespace 'mgks.os.swv'
-	compileSdk swvProps.getProperty('build.sdk.compile', '36').toInteger()
+	namespace = 'mgks.os.swv'
+	compileSdk = swvProps.getProperty('build.sdk.compile', '36').toInteger()
 
 	defaultConfig {
-		applicationId swvProps.getProperty('build.application.id', 'mgks.os.swv')
-		minSdk swvProps.getProperty('build.sdk.min', '24').toInteger()
-		targetSdk swvProps.getProperty('build.sdk.compile', '36').toInteger()
-		versionCode swvProps.getProperty('build.version.code', '1').toInteger()
-		versionName swvProps.getProperty('build.version.name', '1.0')
-		multiDexEnabled true // enable if method count exceeds 64K
+		applicationId = swvProps.getProperty('build.application.id', 'mgks.os.swv')
+		minSdk = swvProps.getProperty('build.sdk.min', '24').toInteger()
+		targetSdk = swvProps.getProperty('build.sdk.compile', '36').toInteger()
+		versionCode = swvProps.getProperty('build.version.code', '1').toInteger()
+		versionName = swvProps.getProperty('build.version.name', '1.0')
 	}
 
 	buildTypes {
 		release {
-			minifyEnabled true
-			shrinkResources true
+			minifyEnabled = true
+			shrinkResources = true
 			proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
 		}
 		debug {
@@ -57,7 +56,7 @@ android {
 	}
 
 	buildFeatures {
-		buildConfig true
+		buildConfig = true
 	}
 
 	compileOptions {
@@ -75,8 +74,6 @@ dependencies {
 	androidTestImplementation 'androidx.test.espresso:espresso-core:3.7.0'
 
 	implementation fileTree(include: ['*.jar'], dir: 'libs')
-
-	implementation 'androidx.multidex:multidex:2.0.1'
 
 	// Firebase
 	implementation 'com.google.firebase:firebase-auth:24.2.0'
