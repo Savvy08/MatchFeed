@@ -7,6 +7,7 @@ on:
       - android-apk
       - android-apk-beta
       - Export-TEST-1
+      - develop
       - main
     paths:
       - 'android/**'
