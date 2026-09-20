@@ -164,3 +164,9 @@
 - Что сделано: В Functions.java добавлен split(",") для ASWV_EXC_LIST; в SofaScoreClient.java наполнение объекта choice в parseChoices обернуто в блок try-catch; успешная сборка проверена локально через assembleDebug.
 - Результат: Проект компилируется без единой ошибки (BUILD SUCCESSFUL), сборка APK полностью работоспособна.
 
+- Заголовок: Подавление предупреждения об устаревшем методе Firebase в Functions.java
+- Причина: Метод getToken() в FirebaseMessaging вызывал предупреждение компилятора и предупреждение IDE в Functions.java.
+- Что сделано: Добавлена аннотация @SuppressWarnings("deprecation") к методу fcm_token.
+- Результат: Предупреждение компилятора и IDE устранено, сборка в GitHub Actions успешно завершена с созданием артефакта APK.
+
+
