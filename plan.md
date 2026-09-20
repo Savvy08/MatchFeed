@@ -47,20 +47,20 @@
 
 
 
-## Ветка: android-apk
-- Заголовок: Автономное Android APK приложение без внешнего сервера
-- Причина: Необходимость полностью автономной работы мобильного приложения на Android без использования внешних серверов или хостингов.
-- План реализации: Взять готовую базу Android-SmartWebView, упаковать фронтенд в assets, портировать логику sofascore_api.py на Kotlin с Google Cronet (обход Cloudflare через shouldInterceptRequest) и собрать APK через Gradle CLI. Оценка времени: ~2-3 часа. Подробный план: [android-apk.md].
+## ~~Ветка: android-apk~~
+- ~~Заголовок: Автономное Android APK приложение без внешнего сервера~~
+- ~~Причина: Необходимость полностью автономной работы мобильного приложения на Android без использования внешних серверов или хостингов.~~
+- ~~План реализации: Взять готовую базу Android-SmartWebView, упаковать фронтенд в assets, портировать логику sofascore_api.py на Kotlin/Java с Google Cronet (обход Cloudflare через shouldInterceptRequest) и собрать APK через Gradle CLI.~~
 
 ## ~~Ветка: android-apk~~
 - ~~Заголовок: Сборка Android APK через GitHub Actions в облаке~~
 - ~~Причина: Локальная сборка сильно нагружает процессор и нагревает MacBook.~~
 - ~~План реализации: Настроить GitHub Actions workflow (.github/workflows/build-apk.yml) для фоновой компиляции debug APK на раннере ubuntu-latest и выгрузки готового APK в артефакты, исключить лишние файлы шаблона из git.~~
 
-## Ветка: android-apk
-- Заголовок: Нативный перехватчик Cronet в Android для автономной работы
-- Причина: Запуск веб-оболочки через file:// в Android вызывал ошибку отсутствия PHP-сервера, блокируя загрузку событий.
-- План реализации: Добавить зависимость org.chromium.net:cronet-embedded, создать SofaScoreClient для прямого обращения к API SofaScore с Chrome TLS-отпечатком и перехватывать вызовы api.php через shouldInterceptRequest в MainActivity.
+## ~~Ветка: android-apk~~
+- ~~Заголовок: Нативный перехватчик Cronet в Android для автономной работы~~
+- ~~Причина: Запуск веб-оболочки через file:// в Android вызывал ошибку отсутствия PHP-сервера, блокируя загрузку событий.~~
+- ~~План реализации: Подключить Cronet Chromium netstack через play-services-cronet, создать SofaScoreClient для прямого обращения к API SofaScore с Chrome TLS-отпечатком и перехватывать вызовы api.php через shouldInterceptRequest в MainActivity.~~
 
 ## ~~Ветка: fix/UI~~
 - ~~Заголовок: Стабильность подключения к SofaScore (IPv4, прокси и понятные ошибки)~~
