@@ -15,8 +15,42 @@ if sys.platform == "win32":
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-
+import os
+from urllib.parse import urlparse
 from curl_cffi import requests
+from curl_cffi.curl import CurlOpt
+
+# Конфигурация и зеркала
+CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+
+def load_config():
+    defaults = {
+        "proxy": "",
+        "base_urls": [
+            "https://api.sofascore.com",
+            "https://api.sofascore.app",
+            "https://mobile.sofascore.com"
+        ]
+    }
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    defaults.update(data)
+        except Exception:
+            pass
+    env_proxy = os.getenv("SOFASCORE_PROXY", "").strip()
+    if env_proxy:
+        defaults["proxy"] = env_proxy
+    return defaults
+
+CONFIG = load_config()
+BASE_URLS = [u.rstrip("/") for u in (CONFIG.get("base_urls") or [
+    "https://api.sofascore.com",
+    "https://api.sofascore.app",
+    "https://mobile.sofascore.com"
+])]
 
 SESSION_HEADERS = {
     "Origin": "https://www.sofascore.com",
@@ -25,13 +59,90 @@ SESSION_HEADERS = {
     "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
+def format_error(exc):
+    err_str = str(exc)
+    if "TLS connect error" in err_str or "CURLE_SSL_CONNECT_ERROR" in err_str:
+        return "Ошибка защищенного соединения с сервером. Проверьте подключение к сети."
+    if "Could not resolve host" in err_str or "CURLE_COULDNT_RESOLVE_HOST" in err_str:
+        return "Сервер спортивных данных недоступен. Проверьте интернет-соединение."
+    if "Connection refused" in err_str or "timed out" in err_str.lower():
+        return "Время ожидания ответа от сервера спортивных данных истекло."
+    if "403" in err_str or "challenge" in err_str:
+        return "Доступ к сервису временно ограничен. Укажите прокси в config.json или смените сеть."
+    return err_str
+
+def fetch_api(session, url_or_path, timeout=10, **kwargs):
+    if url_or_path.startswith("http"):
+        p = urlparse(url_or_path)
+        rel = p.path + (("?" + p.query) if p.query else "")
+    else:
+        rel = url_or_path
+    if not rel.startswith("/"):
+        rel = "/" + rel
+
+    last_resp = None
+    last_err = None
+
+    for base in BASE_URLS:
+        target_url = f"{base}{rel}"
+        try:
+            r = session.get(target_url, timeout=timeout, **kwargs)
+            if r.status_code == 200:
+                return r
+            last_resp = r
+            if r.status_code in (404, 410):
+                return r
+        except Exception as exc:
+            last_err = exc
+            continue
+
+    if last_resp is not None:
+        return last_resp
+    if last_err is not None:
+        raise last_err
+    raise RuntimeError("Не удалось соединиться с серверами спортивных данных")
+
+# Сессия curl_cffi с фиксацией IPv4
+class SofaSession:
+    def __init__(self, raw_session):
+        self._s = raw_session
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        try:
+            self._s.close()
+        except Exception:
+            pass
+
+    def get(self, url, timeout=10, **kwargs):
+        return fetch_api(self._s, url, timeout=timeout, **kwargs)
+
+    def close(self):
+        try:
+            self._s.close()
+        except Exception:
+            pass
+
 def get_session():
+    proxy = (CONFIG.get("proxy") or "").strip()
+    proxies = {"http": proxy, "https": proxy} if proxy else None
+
     for imp in ["chrome124", "chrome120", "chrome110"]:
         try:
-            return requests.Session(impersonate=imp, headers=SESSION_HEADERS)
+            raw = requests.Session(impersonate=imp, headers=SESSION_HEADERS, proxies=proxies)
+            raw.curl_options = {CurlOpt.IPRESOLVE: 1} # 1 = CURL_IPRESOLVE_V4
+            return SofaSession(raw)
         except Exception:
             continue
-    return requests.Session(headers=SESSION_HEADERS)
+
+    raw = requests.Session(headers=SESSION_HEADERS, proxies=proxies)
+    try:
+        raw.curl_options = {CurlOpt.IPRESOLVE: 1}
+    except Exception:
+        pass
+    return SofaSession(raw)
 
 def safe_dict(val):
     return val if isinstance(val, dict) else {}
@@ -163,7 +274,7 @@ def handle_live(sport):
 
             print(json.dumps({"success": True, "sport": slug, "matches": matches}, ensure_ascii=False))
     except Exception as exc:
-        print(json.dumps({"success": False, "error": str(exc), "matches": []}, ensure_ascii=False))
+        print(json.dumps({"success": False, "error": format_error(exc), "matches": []}, ensure_ascii=False))
 
 def handle_search(query):
     try:
@@ -194,7 +305,7 @@ def handle_search(query):
 
             print(json.dumps({"success": True, "players": players}, ensure_ascii=False))
     except Exception as exc:
-        print(json.dumps({"success": False, "error": str(exc), "players": []}, ensure_ascii=False))
+        print(json.dumps({"success": False, "error": format_error(exc), "players": []}, ensure_ascii=False))
 
 def handle_player(player_id, page=0):
     try:
@@ -446,7 +557,7 @@ def handle_player(player_id, page=0):
                 "nextMatches": next_matches
             }, ensure_ascii=False))
     except Exception as exc:
-        print(json.dumps({"success": False, "error": str(exc)}, ensure_ascii=False))
+        print(json.dumps({"success": False, "error": format_error(exc)}, ensure_ascii=False))
 
 # Event helpers
 def parse_team_form(events, team_id, opp_id=None, current_event_id=None):
@@ -1009,7 +1120,7 @@ def handle_event(event_id):
             }
             print(json.dumps(result, ensure_ascii=False))
     except Exception as exc:
-        print(json.dumps({"success": False, "error": str(exc)}, ensure_ascii=False))
+        print(json.dumps({"success": False, "error": format_error(exc)}, ensure_ascii=False))
 
 def handle_image(entity_id, save_path):
     try:

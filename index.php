@@ -76,7 +76,7 @@
     <!-- Детали матча -->
     <div id="match-view" class="app-view hidden">
       <div class="view-sub-header">
-        <button class="view-back-btn" onclick="showView('feed')" aria-label="Назад">
+        <button class="view-back-btn" onclick="navigateBack()" aria-label="Назад">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
           <span>Назад</span>
         </button>
@@ -91,7 +91,7 @@
     <!-- Профиль игрока -->
     <div id="player-view" class="app-view hidden">
       <div class="view-sub-header">
-        <button class="view-back-btn" onclick="goBackFromPlayer()" aria-label="Назад">
+        <button class="view-back-btn" onclick="navigateBack()" aria-label="Назад">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
           <span id="player-back-label">Назад</span>
         </button>
@@ -136,40 +136,77 @@
         <?= getIcon('person', ['size' => 20, 'class' => 'nav-icon']) ?>
         <span>Игрок</span>
       </button>
-      <button class="nav-item" onclick="openInfoModal()" aria-label="Информация о сервисе">
-        <?= getIcon('info', ['size' => 20, 'class' => 'nav-icon']) ?>
-        <span>Инфо</span>
+      <button class="nav-item" id="nav-settings-btn" onclick="openSettingsModal()" aria-label="Настройки">
+        <?= getIcon('settings', ['size' => 20, 'class' => 'nav-icon']) ?>
+        <span>Настройки</span>
       </button>
     </nav>
 
-    <!-- Модальное окно инфо -->
-    <div id="info-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="info-modal-title" onclick="handleBackdropClick(event)">
+    <!-- Модальное окно настроек -->
+    <div id="settings-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title" onclick="handleBackdropClick(event)">
       <div class="modal-card">
         <div class="modal-header">
-          <span id="info-modal-title" class="modal-title">О сервисе MatchFeed</span>
-          <button class="modal-close-btn" onclick="closeInfoModal()" aria-label="Закрыть">
+          <span id="settings-modal-title" class="modal-title">Настройки</span>
+          <button class="modal-close-btn" onclick="closeSettingsModal()" aria-label="Закрыть">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
         </div>
         <div class="modal-body">
-          <div class="modal-info-row">
-            <span class="modal-info-label">Версия</span>
-            <span class="modal-info-value">v2.0</span>
+          <div class="settings-section">
+            <div class="settings-section-title">Управление кэшем</div>
+            <div class="settings-row">
+              <div class="settings-label-group">
+                <span class="settings-label">Размер кэша</span>
+                <span id="cache-size-display" class="settings-desc">Подсчет...</span>
+              </div>
+              <button id="clear-cache-btn" class="settings-action-btn" onclick="handleClearCache()">Очистить кэш</button>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label-group">
+                <span class="settings-label">Автоочистка кэша</span>
+                <span class="settings-desc">Удалять устаревшие файлы автоматически</span>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="auto-clean-toggle" onchange="handleToggleAutoClean(this.checked)" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div id="cache-period-row" class="settings-row">
+              <div class="settings-label-group">
+                <span class="settings-label">Срок хранения кэша</span>
+                <span class="settings-desc">Период перед удалением</span>
+              </div>
+              <select id="cache-period-select" class="settings-select" onchange="handleChangeCachePeriod(this.value)">
+                <option value="7">7 дней</option>
+                <option value="14">14 дней</option>
+                <option value="21">21 день</option>
+                <option value="30">30 дней</option>
+              </select>
+            </div>
           </div>
-          <div class="modal-info-row">
-            <span class="modal-info-label">Источник данных</span>
-            <span class="modal-info-value">SofaScore</span>
-          </div>
-          <div class="modal-info-row">
-            <span class="modal-info-label">Авто-обновление</span>
-            <span class="modal-info-value">Каждые 30 секунд</span>
+
+          <div class="settings-section">
+            <div class="settings-section-title">О сервисе MatchFeed</div>
+            <div class="modal-info-row">
+              <span class="modal-info-label">Версия</span>
+              <span class="modal-info-value">v2.0</span>
+            </div>
+            <div class="modal-info-row">
+              <span class="modal-info-label">Источник данных</span>
+              <span class="modal-info-value">SofaScore</span>
+            </div>
+            <div class="modal-info-row">
+              <span class="modal-info-label">Авто-обновление</span>
+              <span class="modal-info-value">Каждые 30 секунд</span>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
-          <button class="modal-btn-close" onclick="closeInfoModal()">Закрыть</button>
+          <button class="modal-btn-close" onclick="closeSettingsModal()">Закрыть</button>
         </div>
       </div>
     </div>
+
 
   </div>
 

@@ -1,0 +1,8 @@
+{
+  "proxy": "",
+  "base_urls": [
+    "https://api.sofascore.com",
+    "https://api.sofascore.app",
+    "https://mobile.sofascore.com"
+  ]
+}

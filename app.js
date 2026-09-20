@@ -100,6 +100,137 @@ function hideBanner() {
   if (banner) banner.className = 'banner hidden';
 }
 
+// Стек навигации и история
+let navStack = [];
+let isRestoringNavigation = false;
+
+function saveCurrentNavState() {
+  if (currentView === 'match') {
+    return {
+      view: 'match',
+      matchId: currentMatchData?.id,
+      matchTab: currentMatchTab,
+      scrollY: window.scrollY
+    };
+  } else if (currentView === 'player') {
+    return {
+      view: 'player',
+      playerId: currentPlayerId,
+      playerName: currentPlayerName,
+      playerTab: currentPlayerTab,
+      playerFilter: playerMatchesFilter,
+      scrollY: window.scrollY
+    };
+  } else {
+    return {
+      view: 'feed',
+      status: currentStatus,
+      sport: currentSport,
+      favSubTab: favSubTab,
+      scrollY: window.scrollY
+    };
+  }
+}
+
+function pushNavigation() {
+  if (isRestoringNavigation) return;
+  const current = saveCurrentNavState();
+  if (navStack.length > 0) {
+    const last = navStack[navStack.length - 1];
+    if (last.view === current.view && last.matchId === current.matchId && last.playerId === current.playerId && last.status === current.status) {
+      return;
+    }
+  }
+  navStack.push(current);
+  try {
+    window.history.pushState({ navIndex: navStack.length }, '');
+  } catch (e) {}
+}
+
+function navigateBack() {
+  const modal = document.getElementById('settings-modal') || document.getElementById('info-modal');
+  if (modal && modal.classList.contains('open')) {
+    closeSettingsModal();
+    return;
+  }
+
+  if (window.history.state && window.history.state.navIndex > 0) {
+    window.history.back();
+    return;
+  }
+
+  restorePreviousNavigation();
+}
+
+function restorePreviousNavigation() {
+  if (navStack.length === 0) {
+    if (currentView !== 'feed') {
+      openMatchesFeed();
+    }
+    return;
+  }
+
+  const prev = navStack.pop();
+  isRestoringNavigation = true;
+
+  try {
+    if (prev.view === 'match' && prev.matchId) {
+      openMatchDetail(prev.matchId).then(() => {
+        if (prev.matchTab && prev.matchTab !== 'overview') {
+          switchMatchTab(prev.matchTab);
+        }
+        if (typeof prev.scrollY === 'number') {
+          setTimeout(() => window.scrollTo({ top: prev.scrollY, behavior: 'instant' }), 25);
+        }
+      });
+    } else if (prev.view === 'player') {
+      if (prev.playerId) {
+        openPlayerProfile(prev.playerId, prev.playerName).then(() => {
+          if (prev.playerTab && prev.playerTab !== 'overview') {
+            switchPlayerTab(prev.playerTab);
+          }
+          if (typeof prev.scrollY === 'number') {
+            setTimeout(() => window.scrollTo({ top: prev.scrollY, behavior: 'instant' }), 25);
+          }
+        });
+      } else {
+        showView('player');
+        resetPlayerViewToSearch();
+        if (typeof prev.scrollY === 'number') {
+          setTimeout(() => window.scrollTo({ top: prev.scrollY, behavior: 'instant' }), 25);
+        }
+      }
+    } else {
+      if (prev.sport && prev.sport !== currentSport) {
+        currentSport = prev.sport;
+        document.querySelectorAll('.sport-tab').forEach(t => t.classList.toggle('active', t.dataset.sport === currentSport));
+      }
+      if (prev.status === 'favorites') {
+        currentStatus = 'favorites';
+        document.querySelectorAll('.pill').forEach(p => p.classList.toggle('active', p.dataset.status === 'favorites'));
+        if (prev.favSubTab) {
+          favSubTab = prev.favSubTab;
+          document.querySelectorAll('.fav-sub-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === favSubTab));
+        }
+        showView('feed');
+        renderMatches();
+      } else {
+        currentStatus = prev.status || 'all';
+        document.querySelectorAll('.pill').forEach(p => p.classList.toggle('active', p.dataset.status === currentStatus));
+        showView('feed');
+        renderMatches();
+      }
+      if (typeof prev.scrollY === 'number') {
+        setTimeout(() => window.scrollTo({ top: prev.scrollY, behavior: 'instant' }), 25);
+      }
+    }
+  } finally {
+    setTimeout(() => {
+      isRestoringNavigation = false;
+    }, 60);
+  }
+}
+
 // View management
 function showView(viewName) {
   if (currentView !== viewName) {
@@ -130,6 +261,10 @@ function showView(viewName) {
 }
 
 function openMatchesFeed() {
+  navStack = [];
+  try {
+    window.history.replaceState({ navIndex: 0 }, '');
+  } catch (e) {}
   currentStatus = 'all';
   document.querySelectorAll('.pill').forEach(p => {
     p.classList.toggle('active', p.dataset.status === 'all');
@@ -139,6 +274,9 @@ function openMatchesFeed() {
 }
 
 function showFavorites() {
+  if (currentView === 'match' || currentView === 'player') {
+    pushNavigation();
+  }
   currentStatus = 'favorites';
   document.querySelectorAll('.pill').forEach(p => {
     p.classList.toggle('active', p.dataset.status === 'favorites');
@@ -148,6 +286,9 @@ function showFavorites() {
 }
 
 function openPlayerTab() {
+  if (currentView !== 'player') {
+    pushNavigation();
+  }
   showView('player');
   resetPlayerViewToSearch();
 }
@@ -215,13 +356,7 @@ function resetPlayerViewToSearch() {
 }
 
 function goBackFromPlayer() {
-  if (currentPlayerId && previousView !== 'match') {
-    resetPlayerViewToSearch();
-  } else if (previousView === 'match') {
-    showView('match');
-  } else {
-    openMatchesFeed();
-  }
+  navigateBack();
 }
 
 // Match feed fetching & rendering
@@ -721,6 +856,7 @@ function renderMatches() {
 
 // Match detail view
 async function openMatchDetail(matchId) {
+  pushNavigation();
   showView('match');
 
   const titleEl = document.getElementById('match-view-header-title');
@@ -1045,29 +1181,6 @@ function getMatchOverviewHtml(data) {
   const homeRank = data.homeTeam?.ranking ? `№${data.homeTeam.ranking}` : '-';
   const awayRank = data.awayTeam?.ranking ? `№${data.awayTeam.ranking}` : '-';
 
-  // Broadcast / Stream Status HTML
-  let liveTrackerHtml = '';
-  if (data.isLive) {
-    liveTrackerHtml = `
-      <div class="broadcast-banner live">
-        <span class="live-dot-pulse"></span>
-        <div class="broadcast-text">
-          <div class="broadcast-title">Live-трекер матча активен</div>
-          <div class="broadcast-sub">Счет, сеты и статистика обновляются в режиме реального времени</div>
-        </div>
-      </div>
-    `;
-  } else {
-    liveTrackerHtml = `
-      <div class="broadcast-banner">
-        <div class="broadcast-text">
-          <div class="broadcast-title">${escapeHtml(data.status || 'Матч')}</div>
-          <div class="broadcast-sub">Текстовая трансляция и статистика сохранены</div>
-        </div>
-      </div>
-    `;
-  }
-
   return `
     <div class="match-tab-section">
       <div class="match-tab-section-title">Кто победит?</div>
@@ -1091,11 +1204,6 @@ function getMatchOverviewHtml(data) {
           <div class="match-info-row"><span class="info-k">Рейтинг ${escapeHtml(awayName)}</span><span class="info-v">${awayRank}</span></div>
         ` : ''}
       </div>
-    </div>
-
-    <div class="match-tab-section">
-      <div class="match-tab-section-title">Трансляция и статус</div>
-      ${liveTrackerHtml}
     </div>
   `;
 }
@@ -1615,6 +1723,7 @@ function selectSearchedPlayer(id, name) {
 }
 
 async function openPlayerProfile(playerId, playerName) {
+  pushNavigation();
   currentPlayerId = playerId;
   currentPlayerName = playerName;
   currentPlayerPage = 0;
@@ -2171,24 +2280,137 @@ async function loadMorePlayerMatches() {
   }
 }
 
-// Modal functions
-function openInfoModal() {
-  const modal = document.getElementById('info-modal');
-  if (!modal) return;
-  modal.classList.add('open');
-  document.body.style.overflow = 'hidden';
+// Настройки и управление кэшем
+function getCacheSettings() {
+  const defaults = { autoClean: true, cacheDays: 7, lastCleaned: 0 };
+  try {
+    const raw = localStorage.getItem('matchfeed_cache_settings');
+    return raw ? Object.assign(defaults, JSON.parse(raw)) : defaults;
+  } catch (e) {
+    return defaults;
+  }
 }
 
-function closeInfoModal() {
-  const modal = document.getElementById('info-modal');
+function saveCacheSettings(settings) {
+  try {
+    localStorage.setItem('matchfeed_cache_settings', JSON.stringify(settings));
+  } catch (e) {}
+}
+
+async function loadCacheInfo() {
+  const display = document.getElementById('cache-size-display');
+  if (display) display.textContent = 'Подсчет...';
+  try {
+    const res = await apiGet({ action: 'cache_info' });
+    if (res && res.success && display) {
+      display.textContent = `${res.formattedSize} (${res.count} файлов)`;
+    } else if (display) {
+      display.textContent = '0 Б (0 файлов)';
+    }
+  } catch (e) {
+    if (display) display.textContent = 'Недоступно';
+  }
+}
+
+async function handleClearCache() {
+  const btn = document.getElementById('clear-cache-btn');
+  const display = document.getElementById('cache-size-display');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Очистка...';
+  }
+  try {
+    const res = await apiGet({ action: 'clear_cache' });
+    if (res && res.success) {
+      if (display) display.textContent = `0 Б (0 файлов)`;
+      if (btn) btn.textContent = 'Очищено!';
+      setTimeout(() => {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Очистить кэш';
+        }
+      }, 1500);
+    } else {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Ошибка';
+      }
+    }
+  } catch (e) {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Ошибка';
+    }
+  }
+}
+
+function handleToggleAutoClean(enabled) {
+  const settings = getCacheSettings();
+  settings.autoClean = enabled;
+  saveCacheSettings(settings);
+
+  const periodRow = document.getElementById('cache-period-row');
+  if (periodRow) {
+    periodRow.style.display = enabled ? 'flex' : 'none';
+  }
+}
+
+function handleChangeCachePeriod(days) {
+  const settings = getCacheSettings();
+  settings.cacheDays = parseInt(days, 10) || 7;
+  saveCacheSettings(settings);
+}
+
+async function checkAutoCleanCache() {
+  const settings = getCacheSettings();
+  if (!settings.autoClean) return;
+
+  const now = Date.now();
+  if (now - (settings.lastCleaned || 0) > 86400000) {
+    try {
+      await apiGet({ action: 'clean_old_cache', days: settings.cacheDays || 7 });
+      settings.lastCleaned = now;
+      saveCacheSettings(settings);
+    } catch (e) {}
+  }
+}
+
+function openSettingsModal() {
+  const modal = document.getElementById('settings-modal') || document.getElementById('info-modal');
+  if (!modal) return;
+
+  const settings = getCacheSettings();
+  const toggle = document.getElementById('auto-clean-toggle');
+  const select = document.getElementById('cache-period-select');
+  const periodRow = document.getElementById('cache-period-row');
+
+  if (toggle) toggle.checked = !!settings.autoClean;
+  if (select) select.value = String(settings.cacheDays || 7);
+  if (periodRow) periodRow.style.display = settings.autoClean ? 'flex' : 'none';
+
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  loadCacheInfo();
+}
+
+function closeSettingsModal() {
+  const modal = document.getElementById('settings-modal') || document.getElementById('info-modal');
   if (!modal) return;
   modal.classList.remove('open');
   document.body.style.overflow = '';
 }
 
+function openInfoModal() {
+  openSettingsModal();
+}
+
+function closeInfoModal() {
+  closeSettingsModal();
+}
+
 function handleBackdropClick(event) {
   if (event.target === event.currentTarget) {
-    closeInfoModal();
+    closeSettingsModal();
   }
 }
 
@@ -2250,14 +2472,28 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Инициализация истории
+  try {
+    window.history.replaceState({ navIndex: 0 }, '');
+  } catch (e) {}
+
+  window.addEventListener('popstate', () => {
+    const modal = document.getElementById('settings-modal') || document.getElementById('info-modal');
+    if (modal && modal.classList.contains('open')) {
+      closeSettingsModal();
+      return;
+    }
+    restorePreviousNavigation();
+  });
+
   // Escape key closes modal or goes back
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      const modal = document.getElementById('info-modal');
+      const modal = document.getElementById('settings-modal') || document.getElementById('info-modal');
       if (modal && modal.classList.contains('open')) {
-        closeInfoModal();
+        closeSettingsModal();
       } else if (currentView !== 'feed') {
-        showView('feed');
+        navigateBack();
       }
     }
   });
@@ -2265,6 +2501,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initial load
   initDarkMode();
   fetchMatches();
+  checkAutoCleanCache();
 
   // Auto-refresh every 30s only on feed view
   refreshTimer = setInterval(() => {

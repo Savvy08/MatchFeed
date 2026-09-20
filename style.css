@@ -559,6 +559,138 @@ body {
   text-align: right;
 }
 
+/* Настройки и кэш */
+.settings-section {
+  padding: 8px 0;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.settings-section:last-child {
+  border-bottom: none;
+}
+
+.settings-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #9CA3AF;
+  padding: 6px 20px 8px;
+}
+
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  gap: 16px;
+}
+
+.settings-label-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-label {
+  font-size: 13px;
+  color: #111827;
+  font-weight: 600;
+}
+
+.settings-desc {
+  font-size: 12px;
+  color: #6B7280;
+}
+
+.settings-action-btn {
+  padding: 7px 14px;
+  background: #FEE2E2;
+  color: #DC2626;
+  border: 1px solid #FECACA;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.settings-action-btn:hover {
+  background: #FCA5A5;
+}
+
+.settings-action-btn:active {
+  transform: scale(0.96);
+}
+
+.settings-action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: #E5E7EB;
+  transition: 0.25s;
+  border-radius: 24px;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.25s;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background-color: #3B82F6;
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+  transform: translateX(20px);
+}
+
+.settings-select {
+  padding: 6px 12px;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #111827;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.settings-select:focus {
+  border-color: #3B82F6;
+}
+
 .modal-footer {
   padding: 12px 20px 16px;
   border-top: 1px solid #F3F4F6;
@@ -1770,6 +1902,51 @@ body.dark-mode .modal-btn-close {
 
 body.dark-mode .modal-btn-close:active {
   background: #1D4ED8;
+}
+
+/* Настройки в темной теме */
+body.dark-mode .settings-section {
+  border-bottom-color: #1F2937;
+}
+
+body.dark-mode .settings-section-title {
+  color: #64748B;
+}
+
+body.dark-mode .settings-label {
+  color: #F8FAFC;
+}
+
+body.dark-mode .settings-desc {
+  color: #94A3B8;
+}
+
+body.dark-mode .settings-action-btn {
+  background: rgba(239, 68, 68, 0.15);
+  color: #F87171;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+body.dark-mode .settings-action-btn:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+body.dark-mode .toggle-slider {
+  background-color: #334155;
+}
+
+body.dark-mode .toggle-slider:before {
+  background-color: #F8FAFC;
+}
+
+body.dark-mode .toggle-switch input:checked + .toggle-slider {
+  background-color: #2563EB;
+}
+
+body.dark-mode .settings-select {
+  background: #1E293B;
+  border-color: #334155;
+  color: #F8FAFC;
 }
 
 /* Favorites sub-tabs */

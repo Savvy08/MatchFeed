@@ -105,6 +105,12 @@ function runPython(array $args): array {
         $jsonStr = substr($stdout, $start, $end - $start + 1);
         $data = json_decode($jsonStr, true);
         if (is_array($data)) {
+            if (!empty($data['error'])) {
+                $err = (string)$data['error'];
+                if (stripos($err, 'TLS connect error') !== false || stripos($err, 'invalid library') !== false) {
+                    $data['error'] = 'Ошибка сетевого соединения. Проверьте подключение к интернету.';
+                }
+            }
             return $data;
         }
     }
@@ -339,7 +345,17 @@ if ($action === 'player' || $action === 'history') {
     $data = runPython(['player', (string)$id, (string)$page]);
     if (!empty($data['success'])) {
         setCache($cacheKey, $data);
+        echo json_encode($data, JSON_UNESCAPED_UNICODE);
+        exit;
     }
+
+    $stale = getCache($cacheKey, 86400);
+    if ($stale) {
+        $stale['warning'] = 'Данные из кэша';
+        echo json_encode($stale, JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     echo json_encode($data, JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -363,10 +379,160 @@ if ($action === 'event' || $action === 'match') {
     if (!empty($data['success'])) {
         $ttl = (!empty($data['isLive'])) ? 10 : 600;
         setCache($cacheKey, $data);
+        echo json_encode($data, JSON_UNESCAPED_UNICODE);
+        exit;
     }
+
+    $stale = getCache($cacheKey, 86400);
+    if ($stale) {
+        $stale['warning'] = 'Данные из кэша';
+        echo json_encode($stale, JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     echo json_encode($data, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// Управление кэшем
+function formatBytes(int $bytes, int $precision = 1): string {
+    $units = ['Б', 'КБ', 'МБ', 'ГБ'];
+    $bytes = max($bytes, 0);
+    $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+    $pow = min($pow, count($units) - 1);
+    $bytes /= pow(1024, $pow);
+    return round($bytes, $precision) . ' ' . $units[$pow];
+}
+
+// Action: cache_info
+if ($action === 'cache_info') {
+    $filesCount = 0;
+    $totalBytes = 0;
+
+    if (is_dir($cacheDir)) {
+        $items = @scandir($cacheDir) ?: [];
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..' || $item === 'images') continue;
+            $p = $cacheDir . '/' . $item;
+            if (is_file($p)) {
+                $filesCount++;
+                $totalBytes += @filesize($p) ?: 0;
+            }
+        }
+    }
+
+    $imgDir = $cacheDir . '/images';
+    if (is_dir($imgDir)) {
+        $items = @scandir($imgDir) ?: [];
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') continue;
+            $p = $imgDir . '/' . $item;
+            if (is_file($p)) {
+                $filesCount++;
+                $totalBytes += @filesize($p) ?: 0;
+            }
+        }
+    }
+
+    echo json_encode([
+        'success' => true,
+        'count' => $filesCount,
+        'bytes' => $totalBytes,
+        'formattedSize' => formatBytes($totalBytes)
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// Action: clear_cache
+if ($action === 'clear_cache') {
+    $deletedFiles = 0;
+    $freedBytes = 0;
+
+    if (is_dir($cacheDir)) {
+        $items = @scandir($cacheDir) ?: [];
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..' || $item === 'images') continue;
+            $p = $cacheDir . '/' . $item;
+            if (is_file($p)) {
+                $freedBytes += @filesize($p) ?: 0;
+                if (@unlink($p)) {
+                    $deletedFiles++;
+                }
+            }
+        }
+    }
+
+    $imgDir = $cacheDir . '/images';
+    if (is_dir($imgDir)) {
+        $items = @scandir($imgDir) ?: [];
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') continue;
+            $p = $imgDir . '/' . $item;
+            if (is_file($p)) {
+                $freedBytes += @filesize($p) ?: 0;
+                if (@unlink($p)) {
+                    $deletedFiles++;
+                }
+            }
+        }
+    }
+
+    echo json_encode([
+        'success' => true,
+        'deletedFiles' => $deletedFiles,
+        'freedBytes' => $freedBytes,
+        'formattedFreed' => formatBytes($freedBytes)
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// Action: clean_old_cache
+if ($action === 'clean_old_cache') {
+    $days = max(7, min(30, (int)($_GET['days'] ?? 7)));
+    $ttlSeconds = $days * 86400;
+    $deletedFiles = 0;
+    $freedBytes = 0;
+    $now = time();
+
+    if (is_dir($cacheDir)) {
+        $items = @scandir($cacheDir) ?: [];
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..' || $item === 'images') continue;
+            $p = $cacheDir . '/' . $item;
+            if (is_file($p) && ($now - (@filemtime($p) ?: 0)) > $ttlSeconds) {
+                $freedBytes += @filesize($p) ?: 0;
+                if (@unlink($p)) {
+                    $deletedFiles++;
+                }
+            }
+        }
+    }
+
+    $imgDir = $cacheDir . '/images';
+    if (is_dir($imgDir)) {
+        $items = @scandir($imgDir) ?: [];
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') continue;
+            $p = $imgDir . '/' . $item;
+            if (is_file($p) && ($now - (@filemtime($p) ?: 0)) > $ttlSeconds) {
+                $freedBytes += @filesize($p) ?: 0;
+                if (@unlink($p)) {
+                    $deletedFiles++;
+                }
+            }
+        }
+    }
+
+    echo json_encode([
+        'success' => true,
+        'days' => $days,
+        'deletedFiles' => $deletedFiles,
+        'freedBytes' => $freedBytes,
+        'formattedFreed' => formatBytes($freedBytes)
+    ], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
 // Fallback
 echo json_encode(['success' => false, 'error' => 'Неизвестное действие']);
+
