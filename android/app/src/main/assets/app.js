@@ -1203,20 +1203,26 @@ function getMatchOverviewHtml(data) {
   // Odds HTML
   let oddsHtml = '';
   const oddsList = Array.isArray(data.odds) ? data.odds : [];
-  const primaryMarket = oddsList[0];
+  const primaryMarket = oddsList.find(m => Array.isArray(m?.choices) && m.choices.length > 0) || oddsList[0];
   if (primaryMarket && Array.isArray(primaryMarket.choices) && primaryMarket.choices.length > 0) {
     let oddsItems = '';
     primaryMarket.choices.forEach(c => {
-      let label = c.name;
-      if (c.name === '1') label = `П1 (${homeName})`;
-      else if (c.name === '2') label = `П2 (${awayName})`;
-      else if (c.name === 'X' || c.name === 'x') label = 'Ничья';
+      let label = c.name || '';
+      const cNameLower = String(c.name || '').trim().toLowerCase();
+      if (cNameLower === '1' || cNameLower === 'home' || cNameLower === 'w1' || (homeName && cNameLower === homeName.toLowerCase())) {
+        label = `П1 (${homeName})`;
+      } else if (cNameLower === '2' || cNameLower === 'away' || cNameLower === 'w2' || (awayName && cNameLower === awayName.toLowerCase())) {
+        label = `П2 (${awayName})`;
+      } else if (cNameLower === 'x' || cNameLower === 'draw' || cNameLower === 'x2') {
+        label = 'Ничья';
+      }
 
+      const valFormatted = typeof c.val === 'number' ? c.val.toFixed(2) : String(c.val || '-');
       const changeClass = c.change > 0 ? 'odds-up' : (c.change < 0 ? 'odds-down' : '');
       oddsItems += `
         <div class="odds-box">
           <div class="odds-label">${escapeHtml(label)}</div>
-          <div class="odds-value ${changeClass}">${escapeHtml(String(c.val || '-'))}</div>
+          <div class="odds-value ${changeClass}">${escapeHtml(valFormatted)}</div>
         </div>
       `;
     });
