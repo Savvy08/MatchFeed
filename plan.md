@@ -48,9 +48,15 @@
   3. Обеспечить перенос строк в шапке формы и адаптивную ширину рекомендуемого матча.
   4. Синхронизировать style.css и assets/style.css.
 
+- Причина: Сбой компиляции Java в GitHub Actions из-за некорректного for-each по строке ASWV_EXC_LIST в Functions.java и необработанного исключения JSONException в SofaScoreClient.java.
+- План реализации:
+  1. Исправить обход ASWV_EXC_LIST через .split(",") в Functions.java.
+  2. Обернуть choice.put в блок try-catch в SofaScoreClient.java.
+  3. Проверить полную локальную сборку assembleDebug.
+
 ---
 
 ## Текущие задачи
 
-Все задачи веток android-apk, android-apk-beta, fix/bugs-v2 и адаптивность профилей игроков успешно реализованы в ветке Export-TEST-1.
+Все задачи веток android-apk, android-apk-beta, fix/bugs-v2, адаптивность профилей игроков и исправление компиляции Java успешно реализованы в ветке Export-TEST-1.
 
