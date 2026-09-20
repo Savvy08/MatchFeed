@@ -102,6 +102,44 @@ function runPython(array $args, int $timeoutSeconds = 40): array {
 
 }
 
+// ─── RATE LIMITING ──────────────────────────────────── 
+
+$clientIp = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+$limit = 60;
+$cacheKey = 'rate_limit_' . $clientIp;
+
+if ($cache instanceof Cache) {
+    $data = $cache->get($cacheKey, 0);
+
+    $count = 0;
+    $windowStart = time();
+
+    if ($data !== null && is_array($data)) {
+        $count = (int)($data['count'] ?? 0);
+        $windowStart = (int)($data['start'] ?? time());
+    }
+
+    if (time() - $windowStart > 60) {
+        $count = 0;
+        $windowStart = time();
+    }
+
+    if ($count >= $limit) {
+        http_response_code(429);
+        echo json_encode([
+            'success' => false,
+            'error'   => 'Слишком много запросов. Попробуйте позже.',
+            'debug'   => 'Rate limit exceeded for IP: ' . $clientIp
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $cache->set($cacheKey, [
+        'count'  => $count + 1,
+        'start'  => $windowStart
+    ]);
+}
+
 // ─── ACTION: LIVE ─────────────────────────────────────────────────────────────
 if ($action === 'live') {
     $sport = strtolower(trim($_GET['sport'] ?? 'table-tennis'));

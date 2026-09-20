@@ -6,8 +6,13 @@ Zero rate limits, real-time data, Russian translations.
 """
 
 import sys
+import io
 import json
+from datetime import datetime
 from curl_cffi import requests
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 SESSION_HEADERS = {
     "Origin": "https://www.sofascore.com",
@@ -240,7 +245,6 @@ def handle_player(player_id, page=0):
                         won = (p_sets > o_sets)
 
                     ts = e.get("startTimestamp")
-                    from datetime import datetime
                     dt_str = datetime.fromtimestamp(ts).strftime("%d.%m.%Y") if ts else "—"
 
                     tourn = safe_dict(e.get("tournament"))
