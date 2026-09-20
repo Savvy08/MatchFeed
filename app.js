@@ -391,49 +391,25 @@ function formatMatchTime(m) {
 // Unified API client with fallback
 async function apiGet(params) {
   const isAndroidApp = window.navigator.userAgent.includes('MatchFeedApp') || (window.location.protocol === 'file:');
+  const action = (params.action || 'live').toLowerCase();
 
-  // Direct fetch via Chromium engine when running in Android app
-  if (isAndroidApp && window.JSBridge && typeof window.JSBridge.parseApiResponse === 'function') {
-    const action = (params.action || 'live').toLowerCase();
-    const sport = (params.sport || currentSport || 'table-tennis').toLowerCase();
-    let targetUrl = '';
+  // Instant response for cache actions in standalone app
+  if (isAndroidApp && (action === 'cache_info' || action === 'clear_cache' || action === 'clean_old_cache')) {
+    return { success: true, files: 0, sizeFormatted: '0 KB' };
+  }
 
-    if (action === 'live') {
-      const s = (sport === 'tabletennis' || sport === 'tt') ? 'table-tennis' : sport;
-      targetUrl = `https://api.sofascore.com/api/v1/sport/${s}/events/live`;
-    } else if (action === 'match' || action === 'event') {
-      targetUrl = `https://api.sofascore.com/api/v1/event/${params.id}`;
-    } else if (action === 'player') {
-      targetUrl = `https://api.sofascore.com/api/v1/team/${params.id}/events/last/${params.page || 0}`;
-    } else if (action === 'search') {
-      targetUrl = `https://api.sofascore.com/api/v1/search/all?q=${encodeURIComponent(params.q || '')}`;
-    } else if (action === 'cache_info' || action === 'clear_cache' || action === 'clean_old_cache') {
-      return { success: true, files: 0, sizeFormatted: '0 KB' };
-    }
-
-    if (targetUrl) {
-      try {
-        const headers = {
-          'Accept': 'application/json, text/plain, */*',
-          'Origin': 'https://www.sofascore.com',
-          'Referer': 'https://www.sofascore.com/'
-        };
-        let res = null;
-        try {
-          res = await fetch(targetUrl, { method: 'GET', headers: headers, cache: 'no-cache' });
-        } catch (netErr) {
-          const mirrorUrl = targetUrl.replace('https://api.sofascore.com', 'https://api.sofascore.app');
-          res = await fetch(mirrorUrl, { method: 'GET', headers: headers, cache: 'no-cache' });
+  // Native bridge direct call for Android app
+  if (isAndroidApp && window.JSBridge && typeof window.JSBridge.apiCall === 'function') {
+    try {
+      const resStr = window.JSBridge.apiCall(action, JSON.stringify(params));
+      if (resStr && resStr.length > 5) {
+        const parsed = JSON.parse(resStr);
+        if (parsed && (parsed.success !== false || parsed.matches || parsed.profile || parsed.players)) {
+          return parsed;
         }
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-        const rawJson = await res.text();
-        const parsedStr = window.JSBridge.parseApiResponse(action, sport, rawJson);
-        return JSON.parse(parsedStr);
-      } catch (bridgeErr) {
-        console.warn('Native bridge fetch failed, trying fallback:', bridgeErr);
       }
+    } catch (bridgeErr) {
+      console.warn('Native JSBridge.apiCall error, trying fetch fallback:', bridgeErr);
     }
   }
 
@@ -452,6 +428,18 @@ async function apiGet(params) {
     const data = await res.json();
     return data;
   } catch (fetchErr) {
+    // If running in Android app and JSBridge is available, try as fallback
+    if (isAndroidApp && window.JSBridge && typeof window.JSBridge.apiCall === 'function') {
+      try {
+        const resStr = window.JSBridge.apiCall(action, JSON.stringify(params));
+        if (resStr && resStr.length > 5) {
+          return JSON.parse(resStr);
+        }
+      } catch (bridgeErr) {
+        console.warn('Native JSBridge.apiCall fallback failed:', bridgeErr);
+      }
+    }
+
     console.warn(`Fetch error for ${url}, trying XMLHttpRequest fallback:`, fetchErr);
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
@@ -470,11 +458,20 @@ async function apiGet(params) {
         }
       };
       xhr.onerror = function() {
+        if (isAndroidApp && window.JSBridge && typeof window.JSBridge.apiCall === 'function') {
+          try {
+            const resStr = window.JSBridge.apiCall(action, JSON.stringify(params));
+            if (resStr && resStr.length > 5) {
+              resolve(JSON.parse(resStr));
+              return;
+            }
+          } catch (ignored) {}
+        }
         const detail = (fetchErr && fetchErr.message) ? fetchErr.message : 'Сбой сети';
         reject(new Error(`Ошибка подключения к ${url}: ${detail}`));
       };
       xhr.ontimeout = function() {
-        reject(new Error(`Превышено время ожидания ответа (${url})`));
+        reject(new Error(`Таймаут подключения к ${url}`));
       };
       xhr.send();
     });
@@ -531,10 +528,11 @@ async function fetchMatches() {
       renderMatches();
     }
   } catch (err) {
-    if (window.location.protocol === 'file:') {
+    const isAndroidApp = window.navigator.userAgent.includes('MatchFeedApp');
+    if (window.location.protocol === 'file:' && !isAndroidApp) {
       showBanner('error', 'Запустите локальный сервер (php -S localhost:8000). Запуск через file:// не поддерживает PHP', false);
     } else {
-      showBanner('error', 'Ошибка подключения к серверу', true);
+      showBanner('error', 'Ошибка подключения к серверу. Проверьте интернет-соединение', true);
     }
   } finally {
     if (refreshIcon) refreshIcon.classList.remove('spinning');
@@ -1830,8 +1828,7 @@ async function openPlayerProfile(playerId, playerName) {
 
     if (titleEl) titleEl.textContent = 'Профиль игрока';
 
-    const rankHtml = prof.ranking ? `<span class="player-rank-badge">Рейтинг #${prof.ranking}</span>` : '';
-    const countryStr = prof.country ? escapeHtml(prof.country) : 'Настольный теннис';
+    const countryStr = prof.country ? escapeHtml(prof.country) : escapeHtml(prof.sportName || 'Не указана');
     const isPlayerFav = isPlayerFavorite(playerId);
     const playerStarSvg = isPlayerFav
       ? `<svg class="star-icon filled" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>`
@@ -1939,7 +1936,7 @@ function getPlayerOverviewHtml(data) {
     formBadgesHtml = '<span style="font-size:12px;color:#9CA3AF;">Нет данных</span>';
   }
 
-  const genderRu = prof.gender === 'M' ? 'Мужской' : (prof.gender === 'F' ? 'Женский' : 'Не указан');
+  const genderRu = (prof.gender === 'M' || prof.gender === 'Мужской') ? 'Мужской' : ((prof.gender === 'F' || prof.gender === 'Женский') ? 'Женский' : (prof.gender || 'Не указан'));
   const sportRu = prof.sportName || (prof.sport === 'football' ? 'Футбол' : (prof.sport === 'tennis' ? 'Теннис' : 'Настольный теннис'));
   const fullNameStr = escapeHtml(prof.fullName || prof.originalName || prof.name || '-');
   const countryStr = escapeHtml(prof.country || 'Не указана');

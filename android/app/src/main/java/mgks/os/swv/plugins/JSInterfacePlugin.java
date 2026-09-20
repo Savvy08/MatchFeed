@@ -196,5 +196,16 @@ public class JSInterfacePlugin implements PluginInterface {
                 return "{\"success\":false,\"error\":\"" + msg + "\",\"matches\":[]}";
             }
         }
+
+        @JavascriptInterface
+        public String apiCall(String action, String paramsJson) {
+            try {
+                return SofaScoreClient.executeApiCall(action, paramsJson);
+            } catch (Exception e) {
+                Log.e(TAG, "Error in apiCall: " + e.getMessage(), e);
+                String msg = e.getMessage() != null ? e.getMessage().replace("\"", "\\\"") : "Ошибка API";
+                return "{\"success\":false,\"error\":\"" + msg + "\"}";
+            }
+        }
     }
 }
