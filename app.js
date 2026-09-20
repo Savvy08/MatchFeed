@@ -390,6 +390,53 @@ function formatMatchTime(m) {
 
 // Unified API client with fallback
 async function apiGet(params) {
+  const isAndroidApp = window.navigator.userAgent.includes('MatchFeedApp') || (window.location.protocol === 'file:');
+
+  // Direct fetch via Chromium engine when running in Android app
+  if (isAndroidApp && window.JSBridge && typeof window.JSBridge.parseApiResponse === 'function') {
+    const action = (params.action || 'live').toLowerCase();
+    const sport = (params.sport || currentSport || 'table-tennis').toLowerCase();
+    let targetUrl = '';
+
+    if (action === 'live') {
+      const s = (sport === 'tabletennis' || sport === 'tt') ? 'table-tennis' : sport;
+      targetUrl = `https://api.sofascore.com/api/v1/sport/${s}/events/live`;
+    } else if (action === 'match' || action === 'event') {
+      targetUrl = `https://api.sofascore.com/api/v1/event/${params.id}`;
+    } else if (action === 'player') {
+      targetUrl = `https://api.sofascore.com/api/v1/team/${params.id}/events/last/${params.page || 0}`;
+    } else if (action === 'search') {
+      targetUrl = `https://api.sofascore.com/api/v1/search/all?q=${encodeURIComponent(params.q || '')}`;
+    } else if (action === 'cache_info' || action === 'clear_cache' || action === 'clean_old_cache') {
+      return { success: true, files: 0, sizeFormatted: '0 KB' };
+    }
+
+    if (targetUrl) {
+      try {
+        const headers = {
+          'Accept': 'application/json, text/plain, */*',
+          'Origin': 'https://www.sofascore.com',
+          'Referer': 'https://www.sofascore.com/'
+        };
+        let res = null;
+        try {
+          res = await fetch(targetUrl, { method: 'GET', headers: headers, cache: 'no-cache' });
+        } catch (netErr) {
+          const mirrorUrl = targetUrl.replace('https://api.sofascore.com', 'https://api.sofascore.app');
+          res = await fetch(mirrorUrl, { method: 'GET', headers: headers, cache: 'no-cache' });
+        }
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const rawJson = await res.text();
+        const parsedStr = window.JSBridge.parseApiResponse(action, sport, rawJson);
+        return JSON.parse(parsedStr);
+      } catch (bridgeErr) {
+        console.warn('Native bridge fetch failed, trying fallback:', bridgeErr);
+      }
+    }
+  }
+
   const query = new URLSearchParams(params).toString();
   const url = `api.php?${query}`;
 

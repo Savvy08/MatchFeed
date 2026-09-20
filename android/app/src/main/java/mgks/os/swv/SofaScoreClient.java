@@ -70,6 +70,35 @@ public class SofaScoreClient {
         }
     }
 
+    // Bridge entry point for JSInterfacePlugin
+    public static String parseApiResponse(String action, String sport, String rawJson) {
+        if (rawJson == null || rawJson.trim().isEmpty()) {
+            return "{\"success\":false,\"error\":\"Пустой ответ от сервера\",\"matches\":[]}";
+        }
+        if (action == null || action.trim().isEmpty()) action = "live";
+        action = action.trim().toLowerCase(Locale.US);
+
+        try {
+            switch (action) {
+                case "live":
+                    return parseLive(rawJson, sport);
+                case "match":
+                case "event":
+                    return parseMatch(rawJson, "");
+                case "search":
+                    return parseSearch(rawJson);
+                case "player":
+                    return parsePlayer(rawJson, "");
+                default:
+                    return "{\"success\":false,\"error\":\"Неизвестное действие: " + action + "\"}";
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error in parseApiResponse for action " + action, e);
+            String msg = e.getMessage() != null ? e.getMessage().replace("\"", "\\\"") : "Ошибка парсинга";
+            return "{\"success\":false,\"error\":\"" + msg + "\",\"matches\":[]}";
+        }
+    }
+
     // Main request dispatcher for api.php
     public static WebResourceResponse handleRequest(Uri uri) {
         String action = uri.getQueryParameter("action");
@@ -113,8 +142,16 @@ public class SofaScoreClient {
 
         String url = "https://api.sofascore.com/api/v1/sport/" + sport + "/events/live";
         String rawJson = fetchString(url);
-        if (rawJson == null || rawJson.isEmpty()) {
-            return errorResponse("Не удалось получить данные с сервера SofaScore");
+        return jsonResponse(parseLive(rawJson, sport));
+    }
+
+    public static String parseLive(String rawJson, String sport) throws Exception {
+        if (sport == null || sport.trim().isEmpty()) sport = "table-tennis";
+        sport = sport.trim().toLowerCase(Locale.US);
+        if (sport.equals("tabletennis") || sport.equals("tt")) sport = "table-tennis";
+
+        if (rawJson == null || rawJson.trim().isEmpty()) {
+            return "{\"success\":false,\"error\":\"Не удалось получить данные с сервера SofaScore\",\"matches\":[]}";
         }
 
         JSONObject root = new JSONObject(rawJson);
@@ -197,7 +234,7 @@ public class SofaScoreClient {
         result.put("success", true);
         result.put("sport", sport);
         result.put("matches", matches);
-        return jsonResponse(result.toString());
+        return result.toString();
     }
 
     // Match details
@@ -207,13 +244,21 @@ public class SofaScoreClient {
 
         String url = "https://api.sofascore.com/api/v1/event/" + id;
         String rawJson = fetchString(url);
-        if (rawJson == null || rawJson.isEmpty()) {
-            return errorResponse("Не удалось загрузить данные о матче");
+        return jsonResponse(parseMatch(rawJson, id));
+    }
+
+    public static String parseMatch(String rawJson, String id) throws Exception {
+        if (rawJson == null || rawJson.trim().isEmpty()) {
+            return "{\"success\":false,\"error\":\"Не удалось загрузить данные о матче\"}";
         }
 
         JSONObject root = new JSONObject(rawJson);
         JSONObject e = root.optJSONObject("event");
-        if (e == null) return errorResponse("Матч не найден");
+        if (e == null) return "{\"success\":false,\"error\":\"Матч не найден\"}";
+
+        if (id == null || id.isEmpty()) {
+            id = String.valueOf(e.opt("id"));
+        }
 
         JSONObject tourn = e.optJSONObject("tournament");
         JSONObject cat = tourn != null ? tourn.optJSONObject("category") : null;
@@ -274,7 +319,7 @@ public class SofaScoreClient {
         result.put("awayTeam", at);
 
         result.put("sets", sets);
-        return jsonResponse(result.toString());
+        return result.toString();
     }
 
     // Player profile & matches
@@ -286,75 +331,73 @@ public class SofaScoreClient {
 
         if (id == null || id.trim().isEmpty()) return errorResponse("ID игрока не указан");
 
-        String profUrl = "https://api.sofascore.com/api/v1/team/" + id;
-        String profJson = fetchString(profUrl);
-        JSONObject profObj = new JSONObject();
-        if (profJson != null) {
-            JSONObject root = new JSONObject(profJson);
-            JSONObject team = root.optJSONObject("team");
-            if (team != null) {
-                JSONObject cat = team.optJSONObject("country");
-                JSONObject sport = team.optJSONObject("sport");
-                profObj.put("id", team.opt("id"));
-                profObj.put("name", team.optString("name", "-"));
-                profObj.put("country", cat != null ? cat.optString("name", "") : "");
-                profObj.put("sport", sport != null ? sport.optString("slug", "table-tennis") : "table-tennis");
-                profObj.put("gender", team.optString("gender", ""));
-            }
-        }
-
         String histUrl = "https://api.sofascore.com/api/v1/team/" + id + "/events/last/" + page;
         String histJson = fetchString(histUrl);
+        return jsonResponse(parsePlayer(histJson, id));
+    }
+
+    public static String parsePlayer(String rawJson, String id) throws Exception {
+        if (rawJson == null || rawJson.trim().isEmpty()) {
+            return "{\"success\":false,\"error\":\"Не удалось загрузить историю игрока\"}";
+        }
+
+        JSONObject root = new JSONObject(rawJson);
+        JSONArray events = root.optJSONArray("events");
         JSONArray matchesArr = new JSONArray();
+        JSONObject profObj = new JSONObject();
         int wins = 0, losses = 0;
 
-        if (histJson != null) {
-            JSONObject root = new JSONObject(histJson);
-            JSONArray events = root.optJSONArray("events");
-            if (events != null) {
-                SimpleDateFormat sdf = new SimpleDateFormat("dd.MM.yyyy", Locale.getDefault());
-                for (int i = 0; i < events.length(); i++) {
-                    JSONObject e = events.optJSONObject(i);
-                    if (e == null) continue;
+        if (events != null) {
+            SimpleDateFormat sdf = new SimpleDateFormat("dd.MM.yyyy", Locale.getDefault());
+            for (int i = 0; i < events.length(); i++) {
+                JSONObject e = events.optJSONObject(i);
+                if (e == null) continue;
 
-                    JSONObject ht = e.optJSONObject("homeTeam");
-                    JSONObject at = e.optJSONObject("awayTeam");
-                    boolean isHome = ht != null && String.valueOf(ht.opt("id")).equals(id);
+                JSONObject ht = e.optJSONObject("homeTeam");
+                JSONObject at = e.optJSONObject("awayTeam");
+                boolean isHome = ht != null && String.valueOf(ht.opt("id")).equals(id);
 
-                    JSONObject oppTeam = isHome ? at : ht;
-                    JSONObject hs = e.optJSONObject("homeScore");
-                    JSONObject aws = e.optJSONObject("awayScore");
-
-                    Object pSets = isHome ? (hs != null ? hs.opt("current") : null) : (aws != null ? aws.opt("current") : null);
-                    Object oSets = isHome ? (aws != null ? aws.opt("current") : null) : (hs != null ? hs.opt("current") : null);
-
-                    int wc = e.optInt("winnerCode", 0);
-                    Boolean won = null;
-                    if (wc == 1) won = isHome;
-                    else if (wc == 2) won = !isHome;
-                    if (won != null) {
-                        if (won) wins++; else losses++;
+                if (i == 0) {
+                    JSONObject curTeam = isHome ? ht : at;
+                    if (curTeam != null) {
+                        profObj.put("id", curTeam.opt("id"));
+                        profObj.put("name", curTeam.optString("name", "Игрок"));
                     }
-
-                    long ts = e.optLong("startTimestamp", 0);
-                    JSONObject tourn = e.optJSONObject("tournament");
-
-                    JSONObject m = new JSONObject();
-                    m.put("id", String.valueOf(e.opt("id")));
-                    m.put("date", ts > 0 ? sdf.format(new Date(ts * 1000L)) : "-");
-                    m.put("startTimestamp", ts);
-                    m.put("tournament", tourn != null ? tourn.optString("name", "") : "");
-                    
-                    JSONObject opp = new JSONObject();
-                    opp.put("id", oppTeam != null ? oppTeam.opt("id") : null);
-                    opp.put("name", oppTeam != null ? oppTeam.optString("name", "Соперник") : "Соперник");
-                    m.put("opponent", opp);
-
-                    m.put("playerSets", pSets);
-                    m.put("opponentSets", oSets);
-                    m.put("won", won);
-                    matchesArr.put(m);
                 }
+
+                JSONObject oppTeam = isHome ? at : ht;
+                JSONObject hs = e.optJSONObject("homeScore");
+                JSONObject aws = e.optJSONObject("awayScore");
+
+                Object pSets = isHome ? (hs != null ? hs.opt("current") : null) : (aws != null ? aws.opt("current") : null);
+                Object oSets = isHome ? (aws != null ? aws.opt("current") : null) : (hs != null ? hs.opt("current") : null);
+
+                int wc = e.optInt("winnerCode", 0);
+                Boolean won = null;
+                if (wc == 1) won = isHome;
+                else if (wc == 2) won = !isHome;
+                if (won != null) {
+                    if (won) wins++; else losses++;
+                }
+
+                long ts = e.optLong("startTimestamp", 0);
+                JSONObject tourn = e.optJSONObject("tournament");
+
+                JSONObject m = new JSONObject();
+                m.put("id", String.valueOf(e.opt("id")));
+                m.put("date", ts > 0 ? sdf.format(new Date(ts * 1000L)) : "-");
+                m.put("startTimestamp", ts);
+                m.put("tournament", tourn != null ? tourn.optString("name", "") : "");
+                
+                JSONObject opp = new JSONObject();
+                opp.put("id", oppTeam != null ? oppTeam.opt("id") : null);
+                opp.put("name", oppTeam != null ? oppTeam.optString("name", "Соперник") : "Соперник");
+                m.put("opponent", opp);
+
+                m.put("playerSets", pSets);
+                m.put("opponentSets", oSets);
+                m.put("won", won);
+                matchesArr.put(m);
             }
         }
 
@@ -370,8 +413,7 @@ public class SofaScoreClient {
         result.put("profile", profObj);
         result.put("stats", stats);
         result.put("matches", matchesArr);
-        result.put("page", page);
-        return jsonResponse(result.toString());
+        return result.toString();
     }
 
     // Search players
@@ -381,52 +423,55 @@ public class SofaScoreClient {
 
         String url = "https://api.sofascore.com/api/v1/search/all?q=" + Uri.encode(q);
         String rawJson = fetchString(url);
+        return jsonResponse(parseSearch(rawJson));
+    }
+
+    public static String parseSearch(String rawJson) throws Exception {
+        if (rawJson == null || rawJson.trim().isEmpty()) {
+            return "{\"success\":true,\"players\":[]}";
+        }
+
+        JSONObject root = new JSONObject(rawJson);
+        JSONArray results = root.optJSONArray("results");
         JSONArray players = new JSONArray();
 
-        if (rawJson != null) {
-            JSONObject root = new JSONObject(rawJson);
-            JSONArray results = root.optJSONArray("results");
-            if (results != null) {
-                for (int i = 0; i < results.length(); i++) {
-                    JSONObject r = results.optJSONObject(i);
-                    if (r == null) continue;
-                    JSONObject ent = r.optJSONObject("entity");
-                    if (ent == null) continue;
+        if (results != null) {
+            for (int i = 0; i < results.length(); i++) {
+                JSONObject r = results.optJSONObject(i);
+                if (r == null) continue;
+                String type = r.optString("type", "");
+                if (!type.equals("player") && !type.equals("team")) continue;
 
-                    JSONObject sportObj = ent.optJSONObject("sport");
-                    String sportSlug = sportObj != null ? sportObj.optString("slug", "") : "";
-                    if (sportSlug.equals("table-tennis") || sportSlug.equals("tennis") || sportSlug.equals("football")) {
-                        JSONObject cat = ent.optJSONObject("country");
-                        JSONObject p = new JSONObject();
-                        p.put("id", ent.opt("id"));
-                        p.put("name", ent.optString("name", "-"));
-                        p.put("sport", sportSlug);
-                        p.put("country", cat != null ? cat.optString("name", "") : "");
-                        p.put("gender", ent.optString("gender", ""));
-                        players.put(p);
-                    }
-                }
+                JSONObject entity = r.optJSONObject("entity");
+                if (entity == null) continue;
+
+                JSONObject p = new JSONObject();
+                p.put("id", entity.opt("id"));
+                p.put("name", entity.optString("name", ""));
+                JSONObject cat = entity.optJSONObject("country");
+                p.put("country", cat != null ? cat.optString("name", "") : "");
+                players.put(p);
             }
         }
 
-        JSONObject result = new JSONObject();
-        result.put("success", true);
-        result.put("players", players);
-        return jsonResponse(result.toString());
+        JSONObject res = new JSONObject();
+        res.put("success", true);
+        res.put("players", players);
+        return res.toString();
     }
 
-    // Avatar images
+    // Proxy image requests
     private static WebResourceResponse handleImage(Uri uri) {
         String id = uri.getQueryParameter("id");
         if (id == null || id.trim().isEmpty()) {
             return new WebResourceResponse("image/png", null, 404, "Not Found", null, null);
         }
 
-        String url = "https://img.sofascore.com/api/v1/team/" + id + "/image";
+        String url = "https://api.sofascore.com/api/v1/team/" + id + "/image";
+        HttpURLConnection conn = null;
         try {
-            HttpURLConnection conn = openConnection(url);
-            int code = conn.getResponseCode();
-            if (code == 200) {
+            conn = openConnection(url);
+            if (conn.getResponseCode() == 200) {
                 InputStream is = conn.getInputStream();
                 Map<String, String> headers = new HashMap<>();
                 headers.put("Cache-Control", "public, max-age=604800");

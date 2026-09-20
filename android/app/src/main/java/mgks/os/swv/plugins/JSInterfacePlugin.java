@@ -37,6 +37,7 @@ import mgks.os.swv.Functions;
 import mgks.os.swv.PluginInterface;
 import mgks.os.swv.PluginManager;
 import mgks.os.swv.SWVContext;
+import mgks.os.swv.SofaScoreClient;
 
 public class JSInterfacePlugin implements PluginInterface {
     private static final String TAG = "JSInterfacePlugin";
@@ -182,6 +183,17 @@ public class JSInterfacePlugin implements PluginInterface {
                 } catch (Exception e) {
                     Log.e(TAG, "Error showing toast via plugin", e);
                 }
+            }
+        }
+
+        @JavascriptInterface
+        public String parseApiResponse(String action, String sport, String rawJson) {
+            try {
+                return SofaScoreClient.parseApiResponse(action, sport, rawJson);
+            } catch (Exception e) {
+                Log.e(TAG, "Error in parseApiResponse: " + e.getMessage(), e);
+                String msg = e.getMessage() != null ? e.getMessage().replace("\"", "\\\"") : "Ошибка парсинга";
+                return "{\"success\":false,\"error\":\"" + msg + "\",\"matches\":[]}";
             }
         }
     }

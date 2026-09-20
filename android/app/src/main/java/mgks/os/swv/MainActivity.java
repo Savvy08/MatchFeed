@@ -419,13 +419,10 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
         webSettings.setJavaScriptEnabled(true);
         webSettings.setSaveFormData(SWVContext.ASWP_SFORM);
         webSettings.setSupportZoom(SWVContext.ASWP_ZOOM);
-        // SECURITY: File access from URLs is restricted to prevent file:// URL attacks.
-        webSettings.setAllowFileAccess(false);
-        webSettings.setAllowFileAccessFromFileURLs(false);
-        // EXCEPTION: Allow universal access from file:// URLs so the offline page can
-        // access geolocation API and other features. This is safe because the offline
-        // page is a local bundled asset we control. (related to #387)
-        webSettings.setAllowUniversalAccessFromFileURLs(SWVContext.ASWP_OFFLINE);
+        // Allow file access and cross-origin requests from local bundled assets
+        webSettings.setAllowFileAccess(true);
+        webSettings.setAllowFileAccessFromFileURLs(true);
+        webSettings.setAllowUniversalAccessFromFileURLs(true);
         webSettings.setUseWideViewPort(true);
         webSettings.setDomStorageEnabled(true);
         webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);

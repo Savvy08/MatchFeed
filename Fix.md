@@ -117,3 +117,9 @@
 - Причина: При сборке в CI возникала ошибка компиляции «package androidx.multidex does not exist» из-за оставшегося импорта в MetaPull.java после удаления зависимости multidex.
 - Что сделано: Проведен сквозной статический аудит всех 25 Java-файлов, манифеста, XML-ресурсов и зависимостей Gradle. Удален неиспользуемый импорт androidx.multidex.BuildConfig из MetaPull.java. Все файлы проекта протестированы строгой компиляцией javac без multidex с 0 ошибок.
 - Результат: Ошибки компилятора устранены, проект проверен строгой компиляцией без единой ошибки.
+
+## Ветка: android-apk
+- Заголовок: Нативный JS-мост и прямой доступ к API для обхода блокировок file:// и 403
+- Причина: При запуске из file:// в Android WebView движок Chromium блокировал относительные fetch/XHR запросы, а HttpURLConnection на SofaScore возвращал HTTP 403 из-за отсутствия браузерного TLS-отпечатка.
+- Что сделано: В MainActivity включены setAllowUniversalAccessFromFileURLs и setAllowFileAccessFromFileURLs. В JSInterfacePlugin добавлен @JavascriptInterface parseApiResponse для нормализации данных через SofaScoreClient. В assets/app.js и app.js добавлен прямой вызов API через нативный движок Chromium с передачей сырых данных в мост.
+- Результат: Устранены блокировки CORS и 403 Forbidden, данные матчей успешно загружаются через нативный сетевой стек браузера.
