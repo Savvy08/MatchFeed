@@ -6,6 +6,7 @@ import android.util.Log;
 import android.webkit.WebResourceResponse;
 
 import org.chromium.net.CronetEngine;
+import com.google.android.gms.net.CronetProviderInstaller;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -59,6 +60,11 @@ public class SofaScoreClient {
     public static synchronized void init(Context context) {
         if (cronetEngine != null) return;
         try {
+            try {
+                CronetProviderInstaller.installProvider(context.getApplicationContext());
+            } catch (Throwable t) {
+                Log.w(TAG, "CronetProviderInstaller skipped: " + t.getMessage());
+            }
             CronetEngine.Builder builder = new CronetEngine.Builder(context.getApplicationContext());
             builder.enableHttp2(true)
                    .enableQuic(true)

@@ -103,5 +103,5 @@
 ## Ветка: android-apk
 - Заголовок: Нативный сетевой перехватчик Cronet для автономной работы APK
 - Причина: Запуск веб-оболочки через file:// вызывал ошибку отсутствия PHP-сервера при запросе api.php, блокируя загрузку матчей.
-- Что сделано: Подключен org.chromium.net:cronet-embedded, создан SofaScoreClient для прямого обращения к API SofaScore с Chrome TLS-отпечатком, в MainActivity реализован shouldInterceptRequest для прозрачного перехвата вызовов api.php, обновлена обработка ошибок в app.js.
+- Что сделано: Подключен com.google.android.gms:play-services-cronet (устраняющий конфликт пространств имен в AGP 8+), создан SofaScoreClient для прямого обращения к API SofaScore с Chrome TLS-отпечатком, в MainActivity реализован shouldInterceptRequest для прозрачного перехвата вызовов api.php, обновлена обработка ошибок в app.js.
 - Результат: Приложение автономно загружает данные SofaScore прямо на Android-устройстве без внешнего PHP/Python сервера, красный баннер устранен.

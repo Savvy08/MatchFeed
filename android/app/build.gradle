@@ -97,8 +97,8 @@ dependencies {
 	implementation 'androidx.browser:browser:1.10.0'
 	implementation 'androidx.work:work-runtime:2.11.2'
 
-	// Cronet Chromium Network Stack
-	implementation 'org.chromium.net:cronet-embedded:119.6045.31'
+	// Cronet Chromium Network Stack via Google Play Services
+	implementation 'com.google.android.gms:play-services-cronet:18.1.1'
 
 	// Plugins
 	implementation 'com.journeyapps:zxing-android-embedded:4.3.0' // ZXing library for QR code scanning
