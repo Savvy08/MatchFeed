@@ -84,3 +84,18 @@
 - Причина: При нестабильных сетевых маршрутах или блокировках датацентровых IP возникала ошибка curl 35 или 403 challenge, приводившая к падению ленты.
 - Что сделано: Создан файл config.json для автономной настройки прокси и зеркал. В sofascore_api.py внедрена обертка SofaSession с принудительной фиксацией IPv4 (CurlOpt.IPRESOLVE: 1), ротацией зеркал (api.sofascore.com, api.sofascore.app, mobile.sofascore.com) и человекопонятными текстами ошибок (format_error). В api.php добавлен фоллбэк на кэш при сбоях сети для разделов player и event, а также нормализация сетевых ошибок в runPython.
 - Результат: Полная автономность работы без сторонних облачных серверов, устранение сбоя TLS 35 и автоматический переход на зеркала при блокировке одного из доменов.
+
+---
+# android-apk.md
+
+## Ветка: android-apk
+- Заголовок: Настройка окружения Android SDK и базового каркаса SmartWebView
+- Причина: Для автономной сборки Android APK через Gradle CLI на macOS без установки тяжелой Android Studio требовалась настройка JDK 17, Android CLI SDK и исправление сборки R-класса.
+- Что сделано: Установлены openjdk@17 и android-commandlinetools через Homebrew, установлены platform-tools, platforms;android-35 и build-tools;35.0.0, приняты лицензии Android SDK. Развернут каркас Android-SmartWebView в папку android/, перенесен веб-интерфейс в assets, в local.properties настроен путь к SDK, в app/build.gradle зафиксирован namespace 'mgks.os.swv' для корректной генерации R-класса при сохранении applicationId 'com.savvy.matchfeed'.
+- Результат: Базовый проект компилируется и собирается через Gradle CLI.
+
+## Ветка: android-apk
+- Заголовок: Сборка Android APK в облаке через GitHub Actions
+- Причина: Локальная компиляция в Gradle сильно нагружает процессор и нагревает MacBook.
+- Что сделано: Создан workflow .github/workflows/build-apk.yml с триггером ручного запуска и сборки при пуше, настроена установка Temurin JDK 17, Gradle-кэширование и сборка assembleDebug с выгрузкой артефакта APK. В android/.gitignore добавлены demo/ и docmd/.
+- Результат: Сборка APK полностью вынесена в облако GitHub Actions, нагрузка на процессор Mac равна нулю.
