@@ -426,6 +426,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
         webSettings.setUseWideViewPort(true);
         webSettings.setDomStorageEnabled(true);
         webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
+        webSettings.setMediaPlaybackRequiresUserGesture(false);
 
         // Allow third-party cookies for captcha, social logins, etc.
         if (SWVContext.ASWP_ACCEPT_THIRD_PARTY_COOKIES) {
@@ -1056,6 +1057,9 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
 
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+            if (!request.isForMainFrame()) {
+                return false;
+            }
             String url = request.getUrl().toString();
 
             if (SWVContext.getPluginManager().shouldOverrideUrlLoading(view, url)) {

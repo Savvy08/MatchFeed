@@ -804,46 +804,7 @@ public class SofaScoreClient {
             } catch (Exception ignored) {}
 
             // 2. Odds
-            JSONArray oddsList = new JSONArray();
-            try {
-                String odJson = fetchString("https://api.sofascore.com/api/v1/event/" + eventId + "/odds/1/all");
-                if (odJson != null) {
-                    JSONObject odRoot = new JSONObject(odJson);
-                    JSONArray markets = odRoot.optJSONArray("markets");
-                    if (markets != null) {
-                        for (int mIdx = 0; mIdx < markets.length(); mIdx++) {
-                            JSONObject mObj = markets.optJSONObject(mIdx);
-                            if (mObj == null) continue;
-                            JSONArray choicesArr = mObj.optJSONArray("choices");
-                            JSONArray choices = new JSONArray();
-                            if (choicesArr != null) {
-                                for (int cIdx = 0; cIdx < choicesArr.length(); cIdx++) {
-                                    JSONObject c = choicesArr.optJSONObject(cIdx);
-                                    if (c == null) continue;
-                                    String cName = c.optString("name", "");
-                                    Object decVal = c.opt("decimalValue");
-                                    String fVal = c.optString("fractionalValue", "");
-                                    if (decVal == null && fVal.contains("/")) {
-                                        try {
-                                            String[] p = fVal.split("/");
-                                            decVal = Math.round((Double.parseDouble(p[0]) / Double.parseDouble(p[1]) + 1.0) * 100.0) / 100.0;
-                                        } catch (Exception ignored) {}
-                                    }
-                                    JSONObject choice = new JSONObject();
-                                    choice.put("name", cName);
-                                    choice.put("val", decVal != null ? decVal : fVal);
-                                    choice.put("change", c.optInt("change", 0));
-                                    choices.put(choice);
-                                }
-                            }
-                            JSONObject market = new JSONObject();
-                            market.put("market", mObj.optString("marketName", "Full time"));
-                            market.put("choices", choices);
-                            oddsList.put(market);
-                        }
-                    }
-                }
-            } catch (Exception ignored) {}
+            JSONArray oddsList = fetchOddsList(eventId);
 
             // 3. H2H Duel
             JSONObject h2hDuel = new JSONObject();
@@ -1097,28 +1058,100 @@ public class SofaScoreClient {
             JSONArray videosList = new JSONArray();
             Set<String> seenVideos = new HashSet<>();
             try {
-                String medJson = fetchString("https://api.sofascore.com/api/v1/event/" + eventId + "/media");
-                if (medJson != null) {
-                    JSONArray medArr = new JSONObject(medJson).optJSONArray("media");
-                    if (medArr != null) {
-                        for (int mIdx = 0; mIdx < medArr.length(); mIdx++) {
-                            JSONObject m = medArr.optJSONObject(mIdx);
-                            if (m == null) continue;
-                            String urlVal = m.optString("url", "");
-                            String ytId = extractYtId(urlVal);
-                            if (!ytId.isEmpty() && !seenVideos.contains(ytId)) {
-                                seenVideos.add(ytId);
-                                JSONObject v = new JSONObject();
-                                v.put("id", m.opt("id"));
-                                v.put("title", m.optString("title", "Обзор матча"));
-                                v.put("subtitle", m.optString("subtitle", ""));
-                                v.put("url", urlVal);
-                                v.put("youtubeId", ytId);
-                                v.put("videoId", ytId);
-                                v.put("thumbnailUrl", m.optString("thumbnailUrl", "https://i.ytimg.com/vi/" + ytId + "/hqdefault.jpg"));
-                                videosList.put(v);
+                JSONArray rawMedia = new JSONArray();
+                String[] mediaUrls = new String[] {
+                    "https://api.sofascore.com/api/v1/event/" + eventId + "/media",
+                    "https://api.sofascore.app/api/v1/event/" + eventId + "/media"
+                };
+                for (String mUrl : mediaUrls) {
+                    String medJson = fetchString(mUrl);
+                    if (medJson != null) {
+                        JSONArray mArr = new JSONObject(medJson).optJSONArray("media");
+                        if (mArr != null && mArr.length() > 0) {
+                            rawMedia = mArr;
+                            break;
+                        }
+                    }
+                }
+
+                // Fallback to highlights
+                if (rawMedia.length() == 0) {
+                    String[] hlUrls = new String[] {
+                        "https://api.sofascore.com/api/v1/event/" + eventId + "/highlights",
+                        "https://api.sofascore.app/api/v1/event/" + eventId + "/highlights"
+                    };
+                    for (String hlUrl : hlUrls) {
+                        String hlJson = fetchString(hlUrl);
+                        if (hlJson != null) {
+                            JSONObject hlObj = new JSONObject(hlJson);
+                            JSONArray hlArr = hlObj.optJSONArray("highlights");
+                            if (hlArr == null) hlArr = hlObj.optJSONArray("media");
+                            if (hlArr != null && hlArr.length() > 0) {
+                                rawMedia = hlArr;
+                                break;
                             }
                         }
+                    }
+                }
+
+                // Fallback to team media with opponent filter
+                if (rawMedia.length() == 0 && (hid != null || aid != null)) {
+                    Object[] tIds = new Object[] { hid, aid };
+                    for (Object tIdObj : tIds) {
+                        if (tIdObj == null) continue;
+                        String tMediaJson = fetchString("https://api.sofascore.com/api/v1/team/" + tIdObj + "/media");
+                        if (tMediaJson == null) {
+                            tMediaJson = fetchString("https://api.sofascore.app/api/v1/team/" + tIdObj + "/media");
+                        }
+                        if (tMediaJson != null) {
+                            JSONArray tMediaArr = new JSONObject(tMediaJson).optJSONArray("media");
+                            if (tMediaArr != null) {
+                                String oppClean = (tIdObj.equals(hid) ? awayClean : homeClean).toLowerCase(Locale.ROOT);
+                                String[] oppParts = oppClean.split("\\s+");
+                                List<String> validParts = new ArrayList<>();
+                                for (String p : oppParts) {
+                                    if (p.trim().length() > 3) validParts.add(p.trim());
+                                }
+                                for (int tmIdx = 0; tmIdx < tMediaArr.length(); tmIdx++) {
+                                    JSONObject tm = tMediaArr.optJSONObject(tmIdx);
+                                    if (tm == null) continue;
+                                    String titleLower = tm.optString("title", "").toLowerCase(Locale.ROOT);
+                                    boolean matchesOpp = false;
+                                    for (String vp : validParts) {
+                                        if (titleLower.contains(vp)) {
+                                            matchesOpp = true;
+                                            break;
+                                        }
+                                    }
+                                    if (matchesOpp || validParts.isEmpty()) {
+                                        rawMedia.put(tm);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                SimpleDateFormat sdfMedia = new SimpleDateFormat("dd.MM.yyyy", Locale.getDefault());
+                for (int mIdx = 0; mIdx < rawMedia.length(); mIdx++) {
+                    JSONObject m = rawMedia.optJSONObject(mIdx);
+                    if (m == null) continue;
+                    String urlVal = m.optString("url", m.optString("sourceUrl", m.optString("externalUrl", "")));
+                    String ytId = extractYtId(urlVal);
+                    if (!ytId.isEmpty() && !seenVideos.contains(ytId)) {
+                        seenVideos.add(ytId);
+                        long createdTs = m.optLong("createdAtTimestamp", 0);
+                        JSONObject v = new JSONObject();
+                        v.put("id", m.opt("id"));
+                        v.put("title", m.optString("title", m.optString("subtitle", "Видео матча")));
+                        v.put("subtitle", m.optString("subtitle", ""));
+                        v.put("url", urlVal);
+                        v.put("youtubeId", ytId);
+                        v.put("videoId", ytId);
+                        v.put("thumbnailUrl", m.optString("thumbnailUrl", "https://i.ytimg.com/vi/" + ytId + "/hqdefault.jpg"));
+                        v.put("date", createdTs > 0 ? sdfMedia.format(new Date(createdTs * 1000L)) : "");
+                        v.put("source", "Sofascore");
+                        videosList.put(v);
                     }
                 }
             } catch (Exception ignored) {}
@@ -1126,30 +1159,55 @@ public class SofaScoreClient {
             JSONArray newsList = new JSONArray();
             try {
                 String newsJson = fetchString("https://api.sofascore.com/api/v1/event/" + eventId + "/media/news");
+                if (newsJson == null) {
+                    newsJson = fetchString("https://api.sofascore.app/api/v1/event/" + eventId + "/media/news");
+                }
+                JSONArray nArr = null;
                 if (newsJson != null) {
                     JSONObject newsObj = new JSONObject(newsJson);
-                    JSONArray nArr = newsObj.optJSONArray("newsArticles");
+                    nArr = newsObj.optJSONArray("newsArticles");
                     if (nArr == null) nArr = newsObj.optJSONArray("news");
-                    if (nArr != null) {
-                        SimpleDateFormat sdfNews = new SimpleDateFormat("dd.MM.yyyy", Locale.getDefault());
-                        for (int nIdx = 0; nIdx < Math.min(nArr.length(), 6); nIdx++) {
-                            JSONObject item = nArr.optJSONObject(nIdx);
-                            if (item == null) continue;
-                            long nTs = item.optLong("publishedAtTimestamp", item.optLong("startTimestamp", 0));
-                            JSONObject provider = item.optJSONObject("newsProvider");
-                            String provName = provider != null ? provider.optString("name", "Sofascore") : item.optString("source", "Sofascore");
+                }
 
-                            JSONObject n = new JSONObject();
-                            n.put("id", item.opt("id"));
-                            n.put("title", item.optString("header", item.optString("title", "Новость")));
-                            n.put("lead", item.optString("description", item.optString("lead", "")));
-                            n.put("source", provName);
-                            n.put("url", item.optString("externalUrl", item.optString("url", "")));
-                            n.put("thumbnailUrl", item.optString("thumbnailUrl", item.optString("imageUrl", "")));
-                            n.put("timestamp", nTs);
-                            n.put("date", nTs > 0 ? sdfNews.format(new Date(nTs * 1000L)) : "");
-                            newsList.put(n);
+                if ((nArr == null || nArr.length() == 0) && (hid != null || aid != null)) {
+                    Object[] tIds = new Object[] { hid, aid };
+                    for (Object tIdObj : tIds) {
+                        if (tIdObj == null) continue;
+                        String tNewsJson = fetchString("https://api.sofascore.com/api/v1/team/" + tIdObj + "/media/news");
+                        if (tNewsJson == null) {
+                            tNewsJson = fetchString("https://api.sofascore.app/api/v1/team/" + tIdObj + "/media/news");
                         }
+                        if (tNewsJson != null) {
+                            JSONObject tNewsObj = new JSONObject(tNewsJson);
+                            JSONArray tArr = tNewsObj.optJSONArray("newsArticles");
+                            if (tArr == null) tArr = tNewsObj.optJSONArray("news");
+                            if (tArr != null && tArr.length() > 0) {
+                                nArr = tArr;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (nArr != null) {
+                    SimpleDateFormat sdfNews = new SimpleDateFormat("dd.MM.yyyy", Locale.getDefault());
+                    for (int nIdx = 0; nIdx < Math.min(nArr.length(), 6); nIdx++) {
+                        JSONObject item = nArr.optJSONObject(nIdx);
+                        if (item == null) continue;
+                        long nTs = item.optLong("publishedAtTimestamp", item.optLong("startTimestamp", 0));
+                        JSONObject provider = item.optJSONObject("newsProvider");
+                        String provName = provider != null ? provider.optString("name", "Sofascore") : item.optString("source", "Sofascore");
+
+                        JSONObject n = new JSONObject();
+                        n.put("id", item.opt("id"));
+                        n.put("title", item.optString("header", item.optString("title", "Новость")));
+                        n.put("lead", item.optString("description", item.optString("lead", "")));
+                        n.put("source", provName);
+                        n.put("url", item.optString("externalUrl", item.optString("url", "")));
+                        n.put("thumbnailUrl", item.optString("thumbnailUrl", item.optString("imageUrl", "")));
+                        n.put("timestamp", nTs);
+                        n.put("date", nTs > 0 ? sdfNews.format(new Date(nTs * 1000L)) : "");
+                        newsList.put(n);
                     }
                 }
             } catch (Exception ignored) {}
@@ -1231,6 +1289,96 @@ public class SofaScoreClient {
         }
     }
 
+    private static JSONArray fetchOddsList(String eventId) {
+        JSONArray oddsList = new JSONArray();
+        String[] urls = new String[] {
+            "https://api.sofascore.com/api/v1/event/" + eventId + "/odds/featured",
+            "https://api.sofascore.app/api/v1/event/" + eventId + "/odds/featured",
+            "https://api.sofascore.com/api/v1/event/" + eventId + "/odds/1/all",
+            "https://api.sofascore.app/api/v1/event/" + eventId + "/odds/1/all",
+            "https://api.sofascore.com/api/v1/event/" + eventId + "/odds/2/all",
+            "https://api.sofascore.app/api/v1/event/" + eventId + "/odds/2/all"
+        };
+
+        for (String url : urls) {
+            try {
+                String jsonStr = fetchString(url);
+                if (jsonStr == null || jsonStr.trim().isEmpty()) continue;
+                JSONObject root = new JSONObject(jsonStr);
+
+                // 1. Standard markets array
+                JSONArray markets = root.optJSONArray("markets");
+                if (markets != null && markets.length() > 0) {
+                    for (int mIdx = 0; mIdx < markets.length(); mIdx++) {
+                        JSONObject mObj = markets.optJSONObject(mIdx);
+                        if (mObj == null) continue;
+                        JSONArray choicesArr = mObj.optJSONArray("choices");
+                        JSONArray choices = parseChoices(choicesArr);
+                        if (choices.length() > 0) {
+                            JSONObject market = new JSONObject();
+                            market.put("market", mObj.optString("marketName", "Full time"));
+                            market.put("choices", choices);
+                            oddsList.put(market);
+                        }
+                    }
+                }
+
+                // 2. Featured object (/odds/featured)
+                if (oddsList.length() == 0) {
+                    JSONObject featured = root.optJSONObject("featured");
+                    if (featured != null) {
+                        Iterator<String> keys = featured.keys();
+                        while (keys.hasNext()) {
+                            String key = keys.next();
+                            JSONObject mObj = featured.optJSONObject(key);
+                            if (mObj == null) continue;
+                            JSONArray choicesArr = mObj.optJSONArray("choices");
+                            JSONArray choices = parseChoices(choicesArr);
+                            if (choices.length() > 0) {
+                                JSONObject market = new JSONObject();
+                                market.put("market", mObj.optString("marketName", key));
+                                market.put("choices", choices);
+                                oddsList.put(market);
+                            }
+                        }
+                    }
+                }
+
+                if (oddsList.length() > 0) {
+                    break;
+                }
+            } catch (Exception ignored) {}
+        }
+        return oddsList;
+    }
+
+    private static JSONArray parseChoices(JSONArray choicesArr) {
+        JSONArray choices = new JSONArray();
+        if (choicesArr == null) return choices;
+        for (int cIdx = 0; cIdx < choicesArr.length(); cIdx++) {
+            JSONObject c = choicesArr.optJSONObject(cIdx);
+            if (c == null) continue;
+            try {
+                String cName = c.optString("name", "");
+                Object decVal = c.opt("decimalValue");
+                if (decVal == null) decVal = c.opt("initialDecimalValue");
+                String fVal = c.optString("fractionalValue", c.optString("initialFractionalValue", ""));
+                if (decVal == null && fVal.contains("/")) {
+                    try {
+                        String[] p = fVal.split("/");
+                        decVal = Math.round((Double.parseDouble(p[0]) / Double.parseDouble(p[1]) + 1.0) * 100.0) / 100.0;
+                    } catch (Exception ignored) {}
+                }
+                JSONObject choice = new JSONObject();
+                choice.put("name", cName);
+                choice.put("val", decVal != null ? decVal : fVal);
+                choice.put("change", c.optInt("change", 0));
+                choices.put(choice);
+            } catch (Exception ignored) {}
+        }
+        return choices;
+    }
+
     private static void parseTeamFormEvents(JSONArray events, String teamId, String oppId, String currentEventId, List<JSONObject> formList, List<JSONObject> directList) {
         if (events == null) return;
         SimpleDateFormat sdf = new SimpleDateFormat("dd.MM", Locale.getDefault());
@@ -1266,21 +1414,19 @@ public class SofaScoreClient {
             String dtStr = ts > 0 ? sdf.format(new Date(ts * 1000L)) : "-";
             JSONObject tourn = e.optJSONObject("tournament");
 
-            List<String> setsDetail = new ArrayList<>();
-            if (hs != null && aws != null) {
-                for (int p = 1; p <= 7; p++) {
-                    Object p1 = hs.opt("period" + p);
-                    Object p2 = aws.opt("period" + p);
-                    if (p1 == null && p2 == null) break;
-                    setsDetail.add(p1 + "-" + p2);
+            StringBuilder setsSb = new StringBuilder();
+            for (int p = 1; p <= 7; p++) {
+                String key = "period" + p;
+                if ((hs != null && hs.has(key)) || (aws != null && aws.has(key))) {
+                    Object p1 = hs != null ? hs.opt(key) : null;
+                    Object p2 = aws != null ? aws.opt(key) : null;
+                    if (p1 != null || p2 != null) {
+                        if (setsSb.length() > 0) setsSb.append(", ");
+                        setsSb.append(p1 != null ? p1 : 0).append("-").append(p2 != null ? p2 : 0);
+                    }
                 }
             }
-            StringBuilder sb = new StringBuilder();
-            for (int sIdx = 0; sIdx < setsDetail.size(); sIdx++) {
-                if (sIdx > 0) sb.append(", ");
-                sb.append(setsDetail.get(sIdx));
-            }
-            String setsStr = sb.toString();
+            String setsStr = setsSb.toString();
 
             JSONObject m = new JSONObject();
             try {
@@ -1307,8 +1453,8 @@ public class SofaScoreClient {
                     dm.put("date", dtStr);
                     dm.put("startTimestamp", ts);
                     dm.put("tournament", ruName(tourn, "name"));
-                    dm.put("homeTeam", ruName(ht, "name"));
-                    dm.put("awayTeam", ruName(at, "name"));
+                    dm.put("homeTeam", ht != null ? ruName(ht, "name") : "Игрок 1");
+                    dm.put("awayTeam", at != null ? ruName(at, "name") : "Игрок 2");
                     Object hp = hs != null ? hs.opt("current") : null;
                     Object ap = aws != null ? aws.opt("current") : null;
                     dm.put("homeScore", hp);

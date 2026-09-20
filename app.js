@@ -1203,20 +1203,26 @@ function getMatchOverviewHtml(data) {
   // Odds HTML
   let oddsHtml = '';
   const oddsList = Array.isArray(data.odds) ? data.odds : [];
-  const primaryMarket = oddsList[0];
+  const primaryMarket = oddsList.find(m => Array.isArray(m?.choices) && m.choices.length > 0) || oddsList[0];
   if (primaryMarket && Array.isArray(primaryMarket.choices) && primaryMarket.choices.length > 0) {
     let oddsItems = '';
     primaryMarket.choices.forEach(c => {
-      let label = c.name;
-      if (c.name === '1') label = `П1 (${homeName})`;
-      else if (c.name === '2') label = `П2 (${awayName})`;
-      else if (c.name === 'X' || c.name === 'x') label = 'Ничья';
+      let label = c.name || '';
+      const cNameLower = String(c.name || '').trim().toLowerCase();
+      if (cNameLower === '1' || cNameLower === 'home' || cNameLower === 'w1' || (homeName && cNameLower === homeName.toLowerCase())) {
+        label = `П1 (${homeName})`;
+      } else if (cNameLower === '2' || cNameLower === 'away' || cNameLower === 'w2' || (awayName && cNameLower === awayName.toLowerCase())) {
+        label = `П2 (${awayName})`;
+      } else if (cNameLower === 'x' || cNameLower === 'draw' || cNameLower === 'x2') {
+        label = 'Ничья';
+      }
 
+      const valFormatted = typeof c.val === 'number' ? c.val.toFixed(2) : String(c.val || '-');
       const changeClass = c.change > 0 ? 'odds-up' : (c.change < 0 ? 'odds-down' : '');
       oddsItems += `
         <div class="odds-box">
           <div class="odds-label">${escapeHtml(label)}</div>
-          <div class="odds-value ${changeClass}">${escapeHtml(String(c.val || '-'))}</div>
+          <div class="odds-value ${changeClass}">${escapeHtml(valFormatted)}</div>
         </div>
       `;
     });
@@ -1300,7 +1306,7 @@ function getMatchH2HHtml(data) {
           </div>
           <div class="h2h-match-teams">
             <span class="h2h-team-name ${m.winnerCode === 1 ? 'winner' : ''}">${escapeHtml(m.homeTeam || homeName)}</span>
-            <span class="h2h-score-badge">${escapeHtml(m.scoreStr || '-')}</span>
+            <span class="h2h-score-badge">${escapeHtml(m.scoreStr || m.score || '-')}</span>
             <span class="h2h-team-name ${m.winnerCode === 2 ? 'winner' : ''}">${escapeHtml(m.awayTeam || awayName)}</span>
           </div>
           ${m.setsStr ? `<div class="h2h-match-sets">${escapeHtml(m.setsStr)}</div>` : ''}
@@ -1334,7 +1340,18 @@ function getMatchFormHtml(data) {
   const awayForm = data.form?.away || {};
 
   function renderTeamFormBlock(tName, fData) {
-    const streak = fData.streak || { type: 'none', text: 'Нет данных' };
+    const rawStreak = fData.streak;
+    let streak = { type: 'none', text: 'Нет данных' };
+    if (typeof rawStreak === 'object' && rawStreak !== null) {
+      streak = rawStreak;
+    } else if (typeof rawStreak === 'string' && rawStreak.trim().length > 0) {
+      const isWin = rawStreak.includes('побед');
+      const isLoss = rawStreak.includes('поражен');
+      streak = {
+        type: isWin ? 'win' : (isLoss ? 'loss' : 'none'),
+        text: rawStreak
+      };
+    }
     const streakClass = streak.type === 'win' ? 'win' : (streak.type === 'loss' ? 'loss' : 'none');
     const winRate = fData.winRate !== undefined ? `${fData.winRate}% побед` : '';
     const mList = Array.isArray(fData.matches) ? fData.matches : [];
@@ -1362,7 +1379,7 @@ function getMatchFormHtml(data) {
               <span class="form-match-date">${escapeHtml(m.date || '')} • ${escapeHtml(m.tournament || '')}</span>
             </div>
           </div>
-          <div class="form-match-score">${escapeHtml(m.scoreStr || '-')}</div>
+          <div class="form-match-score">${escapeHtml(m.scoreStr || m.score || '-')}</div>
         </div>
       `;
     }).join('') : `<div class="match-tab-empty-note">Нет данных о последних матчах</div>`;
@@ -1837,6 +1854,10 @@ async function openPlayerProfile(playerId, playerName) {
       ? `<svg class="star-icon filled" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>`
       : `<svg class="star-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>`;
 
+    const rankHtml = prof.ranking
+      ? `<span class="player-rank-badge">#${prof.ranking}</span>`
+      : '';
+
     let html = `
       <div class="player-profile-card">
         <div class="player-profile-top" style="display:flex;align-items:center;gap:12px;">
@@ -1968,8 +1989,14 @@ function getPlayerOverviewHtml(data) {
   } else if (matches.length > 0) {
     const lm = matches[0];
     const isWin = lm.won === true;
-    const resClass = isWin ? 'win' : 'loss';
-    const resText = isWin ? `Победа ${lm.playerSets}:${lm.opponentSets}` : `Поражение ${lm.playerSets}:${lm.opponentSets}`;
+    const isLoss = lm.won === false;
+    const resClass = isWin ? 'win' : (isLoss ? 'loss' : '');
+    const setsStr = (lm.playerSets != null && lm.opponentSets != null) ? `${lm.playerSets}:${lm.opponentSets}` : '';
+    const resText = isWin
+      ? `Победа${setsStr ? ' ' + setsStr : ''}`
+      : (isLoss
+        ? `Поражение${setsStr ? ' ' + setsStr : ''}`
+        : `Матч${setsStr ? ' ' + setsStr : ''}`);
     matchCardHtml = `
       <div class="player-tab-section">
         <div class="player-section-header">
@@ -1978,9 +2005,9 @@ function getPlayerOverviewHtml(data) {
         </div>
         <div class="player-featured-match" onclick="openMatchDetail('${escapeHtml(lm.id)}')">
           <div class="featured-match-info">
-            <div class="featured-match-tourn">${escapeHtml(lm.tournament)}</div>
-            <div class="featured-match-opp">vs ${escapeHtml(lm.opponent.name)}</div>
-            <div class="featured-match-time">${escapeHtml(lm.date)}</div>
+            <div class="featured-match-tourn">${escapeHtml(lm.tournament || '-')}</div>
+            <div class="featured-match-opp">vs ${escapeHtml(lm.opponent?.name || 'Соперник')}</div>
+            <div class="featured-match-time">${escapeHtml(lm.date || '-')}</div>
           </div>
           <button class="featured-match-btn">Обзор матча</button>
         </div>
@@ -2260,9 +2287,15 @@ function renderPlayerMatchesList(list) {
   let html = '';
   list.forEach(m => {
     const isWin = m.won === true;
-    const cardClass = isWin ? 'win' : 'loss';
-    const resText = isWin ? `Победа ${m.playerSets}:${m.opponentSets}` : `Поражение ${m.playerSets}:${m.opponentSets}`;
-    const badgeClass = isWin ? 'badge-win' : 'badge-loss';
+    const isLoss = m.won === false;
+    const cardClass = isWin ? 'win' : (isLoss ? 'loss' : '');
+    const setsStr = (m.playerSets != null && m.opponentSets != null) ? `${m.playerSets}:${m.opponentSets}` : '';
+    const resText = isWin
+      ? `Победа${setsStr ? ' ' + setsStr : ''}`
+      : (isLoss
+        ? `Поражение${setsStr ? ' ' + setsStr : ''}`
+        : `Матч${setsStr ? ' ' + setsStr : ''}`);
+    const badgeClass = isWin ? 'badge-win' : (isLoss ? 'badge-loss' : 'badge-draw');
 
     let setsChips = '';
     (m.sets || []).forEach(s => {

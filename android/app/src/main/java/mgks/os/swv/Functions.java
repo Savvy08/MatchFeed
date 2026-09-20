@@ -52,6 +52,7 @@ import java.math.BigInteger;
 
 import java.security.SecureRandom;
 
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 public class Functions{
@@ -273,11 +274,22 @@ public class Functions{
 		// Handle standard web protocols
 		if (url.startsWith("http:") || url.startsWith("https:")) {
 			// Check if it's an external URL that should be opened outside
-			if (SWVContext.ASWP_EXTURL && !aswm_host(url).equals(SWVContext.ASWV_HOST) && !SWVContext.ASWV_EXC_LIST.contains(aswm_host(url))) {
+			String host = aswm_host(url).toLowerCase(Locale.ROOT);
+			boolean isExcluded = false;
+			if (SWVContext.ASWV_EXC_LIST != null && !SWVContext.ASWV_EXC_LIST.trim().isEmpty()) {
+				for (String exc : SWVContext.ASWV_EXC_LIST.split(",")) {
+					String excClean = exc.trim().toLowerCase(Locale.ROOT);
+					if (!excClean.isEmpty() && (host.equals(excClean) || host.endsWith("." + excClean))) {
+						isExcluded = true;
+						break;
+					}
+				}
+			}
+			if (SWVContext.ASWP_EXTURL && !host.equals(SWVContext.ASWV_HOST) && !isExcluded) {
 				aswm_view(url, true, SWVContext.asw_error_counter, activity);
 				return true; // We've handled it by opening externally
 			}
-			// It's an internal link, so let the WebView load it
+			// It's an internal link or allowed external domain, so let the WebView load it
 			return false;
 		}
 		// --- THIS IS THE CATCH-ALL FOR ANY OTHER UNKNOWN SCHEME ---
@@ -417,6 +429,7 @@ public class Functions{
 	}
 
 	// Get fresh firebase tokens
+    @SuppressWarnings("deprecation")
     public void fcm_token(final TokenCallback callback) {
         try {
             // Check if Firebase is initialized before proceeding
