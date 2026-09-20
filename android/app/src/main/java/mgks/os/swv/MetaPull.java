@@ -24,8 +24,6 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.util.Log;
 
-import androidx.multidex.BuildConfig;
-
 public class MetaPull {
 
 	private final Context context;
