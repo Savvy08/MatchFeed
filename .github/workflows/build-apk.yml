@@ -6,6 +6,7 @@ on:
     branches:
       - android-apk
       - android-apk-beta
+      - Export-TEST-1
       - main
     paths:
       - 'android/**'
