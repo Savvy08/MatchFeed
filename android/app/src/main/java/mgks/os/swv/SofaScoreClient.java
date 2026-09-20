@@ -1358,21 +1358,23 @@ public class SofaScoreClient {
         for (int cIdx = 0; cIdx < choicesArr.length(); cIdx++) {
             JSONObject c = choicesArr.optJSONObject(cIdx);
             if (c == null) continue;
-            String cName = c.optString("name", "");
-            Object decVal = c.opt("decimalValue");
-            if (decVal == null) decVal = c.opt("initialDecimalValue");
-            String fVal = c.optString("fractionalValue", c.optString("initialFractionalValue", ""));
-            if (decVal == null && fVal.contains("/")) {
-                try {
-                    String[] p = fVal.split("/");
-                    decVal = Math.round((Double.parseDouble(p[0]) / Double.parseDouble(p[1]) + 1.0) * 100.0) / 100.0;
-                } catch (Exception ignored) {}
-            }
-            JSONObject choice = new JSONObject();
-            choice.put("name", cName);
-            choice.put("val", decVal != null ? decVal : fVal);
-            choice.put("change", c.optInt("change", 0));
-            choices.put(choice);
+            try {
+                String cName = c.optString("name", "");
+                Object decVal = c.opt("decimalValue");
+                if (decVal == null) decVal = c.opt("initialDecimalValue");
+                String fVal = c.optString("fractionalValue", c.optString("initialFractionalValue", ""));
+                if (decVal == null && fVal.contains("/")) {
+                    try {
+                        String[] p = fVal.split("/");
+                        decVal = Math.round((Double.parseDouble(p[0]) / Double.parseDouble(p[1]) + 1.0) * 100.0) / 100.0;
+                    } catch (Exception ignored) {}
+                }
+                JSONObject choice = new JSONObject();
+                choice.put("name", cName);
+                choice.put("val", decVal != null ? decVal : fVal);
+                choice.put("change", c.optInt("change", 0));
+                choices.put(choice);
+            } catch (Exception ignored) {}
         }
         return choices;
     }
