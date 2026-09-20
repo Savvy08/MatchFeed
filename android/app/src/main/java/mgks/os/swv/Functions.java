@@ -429,6 +429,7 @@ public class Functions{
 	}
 
 	// Get fresh firebase tokens
+    @SuppressWarnings("deprecation")
     public void fcm_token(final TokenCallback callback) {
         try {
             // Check if Firebase is initialized before proceeding
