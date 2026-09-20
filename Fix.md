@@ -105,3 +105,9 @@
 - Причина: Запуск веб-оболочки через file:// вызывал ошибку отсутствия PHP-сервера при запросе api.php, блокируя загрузку матчей.
 - Что сделано: Подключен com.google.android.gms:play-services-cronet (устраняющий конфликт пространств имен в AGP 8+), создан SofaScoreClient для прямого обращения к API SofaScore с Chrome TLS-отпечатком, в MainActivity реализован shouldInterceptRequest для прозрачного перехвата вызовов api.php, обновлена обработка ошибок в app.js.
 - Результат: Приложение автономно загружает данные SofaScore прямо на Android-устройстве без внешнего PHP/Python сервера, красный баннер устранен.
+
+## Ветка: android-apk
+- Заголовок: Устранение конфликта манифестов cronet-shared в Android Gradle Plugin
+- Причина: Библиотека play-services-cronet 18.1.1 подтягивала cronet-shared с дублирующим пространством имен org.chromium.net.
+- Что сделано: Зафиксирована версия play-services-cronet 18.1.0 с явным исключением модуля cronet-shared, очищены импорты в SofaScoreClient.
+- Результат: Ошибка сборки processDebugMainManifest устранена, проект готов к компиляции.
