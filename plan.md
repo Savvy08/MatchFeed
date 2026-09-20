@@ -82,3 +82,9 @@
 - ~~Причина: В Android APK отсутствовали био игрока, счет каждого сета, серия побед, форма, H2H, сетка cuptrees, коэффициенты, голосования и аватарки из-за упрощенной реализации SofaScoreClient.~~
 - ~~План реализации: Реализовать в SofaScoreClient полную поддержку многоэтапных запросов и расчетов по аналогии с sofascore_api.py (био игрока, предстоящие матчи, счет каждого сета, streak, recentForm, h2h, cuptrees, media, votes, odds, ru_name). Добавить нативный метод apiCall в JSInterfacePlugin. Объединить apiGet в app.js и assets/app.js с авто-фоллбэком. Обеспечить отдачу аватарок через img.sofascore.com без блокировок 403, синхронизировать assets (app.js, index.html, style.css) и сохранить светлую тему по умолчанию.~~
 
+## ~~Ветка: android-apk-beta~~
+- ~~Заголовок: Устранение контрактных расхождений API и восстановление автономности Android APK~~
+- ~~Причина: В нативной реализации SofaScoreClient обнаружены контрактные несовпадения с app.js (потеря данных в сетке cuptrees, неработающий YouTube-плеер, отсутствие новостей, искажение H2H и серий формы, undefined в окне кэша), а также отсутствие инициализации CronetProviderInstaller, приводящее к 403 Forbidden.~~
+- ~~План реализации: Подключить CronetProviderInstaller в SofaScoreClient.init. Привести структуры JSON в SofaScoreClient к точному соответствию контракту app.js (cuptrees с объектами home/away/matchId/title, newsArticles с корректными полями, youtubeId в media, streak объектом в form, directMatches со scoreStr и командами, cache_info с count и formattedSize). Исправить валидацию ответа моста в apiGet в app.js и assets/app.js. Обеспечить корректное поведение кнопки Назад при открытых модальных окнах в MainActivity.~~
+
+

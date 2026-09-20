@@ -91,6 +91,11 @@ public class SofaScoreClient {
     public static synchronized void init(Context context) {
         if (cronetEngine != null) return;
         try {
+            com.google.android.gms.net.CronetProviderInstaller.installProvider(context.getApplicationContext());
+        } catch (Throwable t) {
+            Log.w(TAG, "CronetProviderInstaller could not install provider", t);
+        }
+        try {
             CronetEngine.Builder builder = new CronetEngine.Builder(context.getApplicationContext());
             builder.enableHttp2(true)
                    .enableQuic(true)
@@ -178,7 +183,7 @@ public class SofaScoreClient {
                 case "cache_info":
                 case "clear_cache":
                 case "clean_old_cache":
-                    return "{\"success\":true,\"files\":0,\"sizeFormatted\":\"0 KB\"}";
+                    return "{\"success\":true,\"count\":0,\"bytes\":0,\"formattedSize\":\"0 КБ\",\"deletedFiles\":0,\"freedBytes\":0,\"formattedFreed\":\"0 КБ\"}";
                 default:
                     return "{\"success\":false,\"error\":\"Неизвестное действие: " + action + "\"}";
             }
@@ -241,7 +246,7 @@ public class SofaScoreClient {
                 case "cache_info":
                 case "clear_cache":
                 case "clean_old_cache":
-                    return jsonResponse("{\"success\":true,\"files\":0,\"sizeFormatted\":\"0 KB\"}");
+                    return jsonResponse("{\"success\":true,\"count\":0,\"bytes\":0,\"formattedSize\":\"0 КБ\",\"deletedFiles\":0,\"freedBytes\":0,\"formattedFreed\":\"0 КБ\"}");
                 default:
                     return errorResponse("Неизвестное действие: " + action);
             }
@@ -959,11 +964,32 @@ public class SofaScoreClient {
                                             JSONObject b = blocks.optJSONObject(bIdx);
                                             if (b == null) continue;
                                             JSONObject blockObj = new JSONObject();
+                                            blockObj.put("blockId", b.opt("id"));
                                             blockObj.put("id", b.opt("id"));
                                             blockObj.put("order", b.optInt("order", bIdx + 1));
+                                            blockObj.put("result", b.optString("result", ""));
+                                            blockObj.put("finished", b.optBoolean("finished", false));
+                                            blockObj.put("isLive", b.optBoolean("eventInProgress", false));
+
+                                            JSONArray blockEvs = new JSONArray();
+                                            JSONArray bEvIds = b.optJSONArray("events");
+                                            boolean containsCurrent = false;
+                                            String firstMatchId = null;
+                                            if (bEvIds != null) {
+                                                for (int beIdx = 0; beIdx < bEvIds.length(); beIdx++) {
+                                                    String beId = String.valueOf(bEvIds.opt(beIdx));
+                                                    blockEvs.put(beId);
+                                                    if (firstMatchId == null) firstMatchId = beId;
+                                                    if (beId.equals(eventId)) containsCurrent = true;
+                                                }
+                                            }
+                                            blockObj.put("matchId", firstMatchId);
+                                            blockObj.put("events", blockEvs);
+                                            blockObj.put("isCurrent", containsCurrent);
 
                                             JSONArray pArr = new JSONArray();
                                             JSONArray partArr = b.optJSONArray("participants");
+                                            List<JSONObject> pList = new ArrayList<>();
                                             if (partArr != null) {
                                                 for (int pIdx = 0; pIdx < partArr.length(); pIdx++) {
                                                     JSONObject pt = partArr.optJSONObject(pIdx);
@@ -971,39 +997,48 @@ public class SofaScoreClient {
                                                     JSONObject team = pt.optJSONObject("team");
                                                     JSONObject pObj = new JSONObject();
                                                     pObj.put("order", pt.optInt("order", pIdx + 1));
-                                                    pObj.put("winner", pt.optBoolean("winner", false));
+                                                    pObj.put("winner", pt.opt("winner"));
                                                     pObj.put("seed", pt.opt("seed"));
-                                                    pObj.put("score", pt.opt("score"));
                                                     if (team != null) {
                                                         pObj.put("id", team.opt("id"));
                                                         pObj.put("name", ruName(team, "name"));
                                                     } else {
                                                         pObj.put("id", null);
-                                                        pObj.put("name", "Определится позже");
+                                                        pObj.put("name", "-");
                                                     }
+                                                    pList.add(pObj);
                                                     pArr.put(pObj);
                                                 }
                                             }
                                             blockObj.put("participants", pArr);
 
-                                            JSONArray blockEvs = new JSONArray();
-                                            JSONArray bEvIds = b.optJSONArray("events");
-                                            boolean containsCurrent = false;
-                                            if (bEvIds != null) {
-                                                for (int beIdx = 0; beIdx < bEvIds.length(); beIdx++) {
-                                                    String beId = String.valueOf(bEvIds.opt(beIdx));
-                                                    blockEvs.put(beId);
-                                                    if (beId.equals(eventId)) containsCurrent = true;
-                                                }
-                                            }
-                                            blockObj.put("events", blockEvs);
-                                            blockObj.put("isCurrent", containsCurrent);
+                                            JSONObject p1 = !pList.isEmpty() ? pList.get(0) : null;
+                                            JSONObject p2 = pList.size() > 1 ? pList.get(1) : null;
+
+                                            JSONObject home = new JSONObject();
+                                            home.put("id", p1 != null ? p1.opt("id") : null);
+                                            home.put("name", p1 != null ? p1.optString("name", "-") : "-");
+                                            home.put("winner", p1 != null ? p1.opt("winner") : null);
+                                            home.put("seed", p1 != null ? p1.opt("seed") : null);
+                                            home.put("score", b.opt("homeTeamScore"));
+                                            blockObj.put("home", home);
+
+                                            JSONObject away = new JSONObject();
+                                            away.put("id", p2 != null ? p2.opt("id") : null);
+                                            away.put("name", p2 != null ? p2.optString("name", "-") : "-");
+                                            away.put("winner", p2 != null ? p2.opt("winner") : null);
+                                            away.put("seed", p2 != null ? p2.opt("seed") : null);
+                                            away.put("score", b.opt("awayTeamScore"));
+                                            blockObj.put("away", away);
+
                                             roundBlocks.put(blockObj);
                                         }
                                     }
 
                                     JSONObject rObj = new JSONObject();
+                                    rObj.put("title", roundName);
                                     rObj.put("name", roundName);
+                                    rObj.put("originalTitle", desc);
                                     rObj.put("order", r.optInt("order", rIdx + 1));
                                     rObj.put("blocks", roundBlocks);
                                     treeRounds.put(rObj);
@@ -1034,13 +1069,23 @@ public class SofaScoreClient {
                                 String tDesc = tStat != null ? tStat.optString("description", "").toLowerCase(Locale.US) : "";
                                 long tTs = te.optLong("startTimestamp", 0);
 
+                                JSONObject thObj = new JSONObject();
+                                thObj.put("name", ruName(th, "name"));
+                                thObj.put("score", ths != null ? ths.opt("current") : null);
+
+                                JSONObject taObj = new JSONObject();
+                                taObj.put("name", ruName(ta, "name"));
+                                taObj.put("score", tas != null ? tas.opt("current") : null);
+
                                 JSONObject tm = new JSONObject();
                                 tm.put("id", String.valueOf(te.opt("id")));
-                                tm.put("homeTeam", ruName(th, "name"));
-                                tm.put("awayTeam", ruName(ta, "name"));
+                                tm.put("homeTeam", thObj);
+                                tm.put("awayTeam", taObj);
                                 tm.put("score", (ths != null ? ths.opt("current") : "-") + ":" + (tas != null ? tas.opt("current") : "-"));
                                 tm.put("date", tTs > 0 ? sdfShort.format(new Date(tTs * 1000L)) : "-");
                                 tm.put("status", STATUS_RU.getOrDefault(tDesc, tDesc));
+                                tm.put("isCurrent", String.valueOf(te.opt("id")).equals(eventId));
+                                tm.put("isLive", "inprogress".equalsIgnoreCase(tDesc) || (tStat != null && "inprogress".equalsIgnoreCase(tStat.optString("type"))));
                                 tournMatches.put(tm);
                             }
                         }
@@ -1064,11 +1109,13 @@ public class SofaScoreClient {
                             if (!ytId.isEmpty() && !seenVideos.contains(ytId)) {
                                 seenVideos.add(ytId);
                                 JSONObject v = new JSONObject();
+                                v.put("id", m.opt("id"));
                                 v.put("title", m.optString("title", "Обзор матча"));
                                 v.put("subtitle", m.optString("subtitle", ""));
                                 v.put("url", urlVal);
+                                v.put("youtubeId", ytId);
                                 v.put("videoId", ytId);
-                                v.put("thumbnailUrl", m.optString("thumbnailUrl", "https://img.youtube.com/vi/" + ytId + "/hqdefault.jpg"));
+                                v.put("thumbnailUrl", m.optString("thumbnailUrl", "https://i.ytimg.com/vi/" + ytId + "/hqdefault.jpg"));
                                 videosList.put(v);
                             }
                         }
@@ -1080,20 +1127,26 @@ public class SofaScoreClient {
             try {
                 String newsJson = fetchString("https://api.sofascore.com/api/v1/event/" + eventId + "/media/news");
                 if (newsJson != null) {
-                    JSONArray nArr = new JSONObject(newsJson).optJSONArray("news");
+                    JSONObject newsObj = new JSONObject(newsJson);
+                    JSONArray nArr = newsObj.optJSONArray("newsArticles");
+                    if (nArr == null) nArr = newsObj.optJSONArray("news");
                     if (nArr != null) {
                         SimpleDateFormat sdfNews = new SimpleDateFormat("dd.MM.yyyy", Locale.getDefault());
                         for (int nIdx = 0; nIdx < Math.min(nArr.length(), 6); nIdx++) {
                             JSONObject item = nArr.optJSONObject(nIdx);
                             if (item == null) continue;
-                            long nTs = item.optLong("startTimestamp", 0);
+                            long nTs = item.optLong("publishedAtTimestamp", item.optLong("startTimestamp", 0));
+                            JSONObject provider = item.optJSONObject("newsProvider");
+                            String provName = provider != null ? provider.optString("name", "Sofascore") : item.optString("source", "Sofascore");
+
                             JSONObject n = new JSONObject();
                             n.put("id", item.opt("id"));
-                            n.put("title", item.optString("title", ""));
-                            n.put("lead", item.optString("lead", ""));
-                            n.put("source", item.optString("source", "SofaScore"));
-                            n.put("url", item.optString("url", ""));
-                            n.put("imageUrl", item.optString("imageUrl", ""));
+                            n.put("title", item.optString("header", item.optString("title", "Новость")));
+                            n.put("lead", item.optString("description", item.optString("lead", "")));
+                            n.put("source", provName);
+                            n.put("url", item.optString("externalUrl", item.optString("url", "")));
+                            n.put("thumbnailUrl", item.optString("thumbnailUrl", item.optString("imageUrl", "")));
+                            n.put("timestamp", nTs);
                             n.put("date", nTs > 0 ? sdfNews.format(new Date(nTs * 1000L)) : "");
                             newsList.put(n);
                         }
@@ -1191,6 +1244,9 @@ public class SofaScoreClient {
             JSONObject ht = e.optJSONObject("homeTeam");
             JSONObject at = e.optJSONObject("awayTeam");
             boolean isHome = ht != null && String.valueOf(ht.opt("id")).equals(teamId);
+            boolean isAway = at != null && String.valueOf(at.opt("id")).equals(teamId);
+            if (!isHome && !isAway) continue;
+
             JSONObject opp = isHome ? at : ht;
             JSONObject hs = e.optJSONObject("homeScore");
             JSONObject aws = e.optJSONObject("awayScore");
@@ -1210,6 +1266,22 @@ public class SofaScoreClient {
             String dtStr = ts > 0 ? sdf.format(new Date(ts * 1000L)) : "-";
             JSONObject tourn = e.optJSONObject("tournament");
 
+            List<String> setsDetail = new ArrayList<>();
+            if (hs != null && aws != null) {
+                for (int p = 1; p <= 7; p++) {
+                    Object p1 = hs.opt("period" + p);
+                    Object p2 = aws.opt("period" + p);
+                    if (p1 == null && p2 == null) break;
+                    setsDetail.add(p1 + "-" + p2);
+                }
+            }
+            StringBuilder sb = new StringBuilder();
+            for (int sIdx = 0; sIdx < setsDetail.size(); sIdx++) {
+                if (sIdx > 0) sb.append(", ");
+                sb.append(setsDetail.get(sIdx));
+            }
+            String setsStr = sb.toString();
+
             JSONObject m = new JSONObject();
             try {
                 m.put("id", eid);
@@ -1217,6 +1289,8 @@ public class SofaScoreClient {
                 m.put("startTimestamp", ts);
                 m.put("won", won != null ? won : JSONObject.NULL);
                 m.put("score", (pSets != null ? pSets : 0) + ":" + (oSets != null ? oSets : 0));
+                m.put("scoreStr", (pSets != null && oSets != null) ? (pSets + " - " + oSets) : "-");
+                m.put("setsStr", setsStr);
                 m.put("opponent", opp != null ? ruName(opp, "name") : "Соперник");
                 m.put("tournament", ruName(tourn, "name"));
             } catch (Exception ignored) {}
@@ -1227,28 +1301,71 @@ public class SofaScoreClient {
             }
 
             if (directList != null && oppId != null && opp != null && String.valueOf(opp.opt("id")).equals(oppId)) {
-                directList.add(m);
+                JSONObject dm = new JSONObject();
+                try {
+                    dm.put("id", eid);
+                    dm.put("date", dtStr);
+                    dm.put("startTimestamp", ts);
+                    dm.put("tournament", ruName(tourn, "name"));
+                    dm.put("homeTeam", ruName(ht, "name"));
+                    dm.put("awayTeam", ruName(at, "name"));
+                    Object hp = hs != null ? hs.opt("current") : null;
+                    Object ap = aws != null ? aws.opt("current") : null;
+                    dm.put("homeScore", hp);
+                    dm.put("awayScore", ap);
+                    dm.put("scoreStr", (hp != null && ap != null) ? (hp + " - " + ap) : "-");
+                    dm.put("winnerCode", wc);
+                    dm.put("setsStr", setsStr);
+                    directList.add(dm);
+                } catch (Exception ignored) {}
             }
         }
     }
 
-    private static String calcStreak(List<JSONObject> formList) {
-        if (formList.isEmpty()) return "Нет серии";
-        JSONObject first = formList.get(0);
-        if (first.isNull("won")) return "Нет серии";
-        boolean firstWon = first.optBoolean("won");
-        int count = 0;
-        for (JSONObject m : formList) {
-            if (!m.isNull("won") && m.optBoolean("won") == firstWon) {
-                count++;
-            } else {
-                break;
+    private static JSONObject calcStreak(List<JSONObject> formList) {
+        JSONObject res = new JSONObject();
+        try {
+            if (formList == null || formList.isEmpty()) {
+                res.put("type", "none");
+                res.put("count", 0);
+                res.put("text", "Нет данных");
+                return res;
             }
-        }
-        if (count == 0) return "Нет серии";
-        String ending = (count == 1) ? "победа" : ((count >= 2 && count <= 4) ? "победы" : "побед");
-        if (!firstWon) ending = (count == 1) ? "поражение" : ((count >= 2 && count <= 4) ? "поражения" : "поражений");
-        return count + " " + ending + " подряд";
+            JSONObject first = formList.get(0);
+            if (first.isNull("won")) {
+                res.put("type", "draw");
+                res.put("count", 1);
+                res.put("text", "1 ничья");
+                return res;
+            }
+            boolean firstWon = first.optBoolean("won");
+            int count = 0;
+            for (JSONObject m : formList) {
+                if (!m.isNull("won") && m.optBoolean("won") == firstWon) {
+                    count++;
+                } else {
+                    break;
+                }
+            }
+            if (count == 0) {
+                res.put("type", "none");
+                res.put("count", 0);
+                res.put("text", "Нет данных");
+                return res;
+            }
+            if (firstWon) {
+                String txt = (count >= 2 && count <= 4) ? (count + " победы подряд") : (count >= 5 ? (count + " побед подряд") : "1 победа");
+                res.put("type", "win");
+                res.put("count", count);
+                res.put("text", txt);
+            } else {
+                String txt = (count >= 2 && count <= 4) ? (count + " поражения подряд") : (count >= 5 ? (count + " поражений подряд") : "1 поражение");
+                res.put("type", "loss");
+                res.put("count", count);
+                res.put("text", txt);
+            }
+        } catch (Exception ignored) {}
+        return res;
     }
 
     // Action search
@@ -1312,10 +1429,21 @@ public class SofaScoreClient {
         }
     }
 
+    private static final String SVG_AVATAR_FALLBACK = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 48 48\" fill=\"#9CA3AF\"><circle cx=\"24\" cy=\"24\" r=\"24\" fill=\"#E5E7EB\"/><path d=\"M24 23a6 6 0 1 0 0-12 6 6 0 0 0 0 12zm0 4c-6.67 0-14 3.33-14 10v1h28v-1c0-6.67-7.33-10-14-10z\"/></svg>";
+
+    private static WebResourceResponse svgFallbackResponse() {
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Access-Control-Allow-Origin", "*");
+        headers.put("Content-Type", "image/svg+xml");
+        headers.put("Cache-Control", "public, max-age=604800");
+        byte[] data = SVG_AVATAR_FALLBACK.getBytes(StandardCharsets.UTF_8);
+        return new WebResourceResponse("image/svg+xml", "UTF-8", 200, "OK", headers, new ByteArrayInputStream(data));
+    }
+
     // Action image
     public static WebResourceResponse handleImageAction(String id) {
         if (id == null || id.trim().isEmpty()) {
-            return new WebResourceResponse("image/png", null, 404, "Not Found", null, null);
+            return svgFallbackResponse();
         }
 
         // Try img.sofascore.com first (direct CDN without 403 blocks)
@@ -1355,7 +1483,7 @@ public class SofaScoreClient {
                 }
             }
         }
-        return new WebResourceResponse("image/png", null, 404, "Not Found", null, null);
+        return svgFallbackResponse();
     }
 
     // Network helper

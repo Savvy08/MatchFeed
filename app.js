@@ -395,7 +395,7 @@ async function apiGet(params) {
 
   // Instant response for cache actions in standalone app
   if (isAndroidApp && (action === 'cache_info' || action === 'clear_cache' || action === 'clean_old_cache')) {
-    return { success: true, files: 0, sizeFormatted: '0 KB' };
+    return { success: true, count: 0, bytes: 0, formattedSize: '0 КБ', deletedFiles: 0, freedBytes: 0, formattedFreed: '0 КБ' };
   }
 
   // Native bridge direct call for Android app
@@ -404,7 +404,7 @@ async function apiGet(params) {
       const resStr = window.JSBridge.apiCall(action, JSON.stringify(params));
       if (resStr && resStr.length > 5) {
         const parsed = JSON.parse(resStr);
-        if (parsed && (parsed.success !== false || parsed.matches || parsed.profile || parsed.players)) {
+        if (parsed && parsed.success === true) {
           return parsed;
         }
       }
@@ -433,7 +433,10 @@ async function apiGet(params) {
       try {
         const resStr = window.JSBridge.apiCall(action, JSON.stringify(params));
         if (resStr && resStr.length > 5) {
-          return JSON.parse(resStr);
+          const parsed = JSON.parse(resStr);
+          if (parsed && parsed.success === true) {
+            return parsed;
+          }
         }
       } catch (bridgeErr) {
         console.warn('Native JSBridge.apiCall fallback failed:', bridgeErr);
@@ -2434,14 +2437,22 @@ function openSettingsModal() {
 
   modal.classList.add('open');
   document.body.style.overflow = 'hidden';
+  try {
+    window.history.pushState({ modal: 'settings' }, '');
+  } catch (e) {}
   loadCacheInfo();
 }
 
-function closeSettingsModal() {
+function closeSettingsModal(isFromPopstate = false) {
   const modal = document.getElementById('settings-modal') || document.getElementById('info-modal');
   if (!modal) return;
   modal.classList.remove('open');
   document.body.style.overflow = '';
+  if (!isFromPopstate && window.history.state && window.history.state.modal === 'settings') {
+    try {
+      window.history.back();
+    } catch (e) {}
+  }
 }
 
 function openInfoModal() {
@@ -2524,7 +2535,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('popstate', () => {
     const modal = document.getElementById('settings-modal') || document.getElementById('info-modal');
     if (modal && modal.classList.contains('open')) {
-      closeSettingsModal();
+      closeSettingsModal(true);
       return;
     }
     restorePreviousNavigation();

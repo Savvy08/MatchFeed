@@ -135,3 +135,10 @@
 - Причина: В Android APK отсутствовали био игрока, счет каждого сета, серия побед, форма, H2H, турнирная сетка cuptrees, коэффициенты, голосования и аватарки из-за неполной нативной реализации.
 - Что сделано: В SofaScoreClient перенесены все вызовы и расчеты из sofascore_api.py (био /team/{id}, предстоящие матчи /events/next/0, счет сетов period1..7, recentForm, streak, h2h, cuptrees, media, votes, odds, ru_name). В JSInterfacePlugin добавлен нативный метод apiCall. В app.js и assets/app.js объединен клиент apiGet с поддержкой JSBridge и авто-фоллбэком на fetch/XHR. Обеспечено прямое получение аватарок через img.sofascore.com без блокировок 403.
 - Результат: Android APK полностью идентичен эталонной веб-версии по объему данных, структуре карточек, аналитике и внешнему виду.
+
+## Ветка: android-apk-beta
+- Заголовок: Исправление контрактов данных SofaScoreClient, сетевого стека Cronet и синхронизация APK
+- Причина: В Android APK не отображались участники турнирной сетки cuptrees, видео YouTube и новости в Медиа, искажались личные встречи H2H и серия побед в Форме, окно Настройки выводило undefined из-за расхождения ключей JSON, а CronetEngine не запускался без регистрации провайдера.
+- Что сделано: В SofaScoreClient добавлен вызов CronetProviderInstaller.installProvider с безопасным фоллбэком, переработаны структуры JSON для cuptrees, media (youtubeId), news (newsArticles), h2h (directMatches), form (объект streak и scoreStr), cache_info (count и formattedSize), добавлен SVG-фоллбэк для аватарок при 404. В app.js и assets/app.js скорректировано условие валидации ответа в apiGet. В MainActivity обеспечена обработка закрытия модальных окон при системном нажатии Назад.
+- Результат: Турнирная сетка, медиаплеер, новости, H2H, серии формы и настройки кэша полностью функционируют на Android в строгом соответствии с эталонной веб-версией.
+

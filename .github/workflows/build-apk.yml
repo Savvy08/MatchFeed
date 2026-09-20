@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - android-apk
+      - android-apk-beta
       - main
     paths:
       - 'android/**'
