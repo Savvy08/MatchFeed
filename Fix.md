@@ -123,3 +123,9 @@
 - Причина: При запуске из file:// в Android WebView движок Chromium блокировал относительные fetch/XHR запросы, а HttpURLConnection на SofaScore возвращал HTTP 403 из-за отсутствия браузерного TLS-отпечатка.
 - Что сделано: В MainActivity включены setAllowUniversalAccessFromFileURLs и setAllowFileAccessFromFileURLs. В JSInterfacePlugin добавлен @JavascriptInterface parseApiResponse для нормализации данных через SofaScoreClient. В assets/app.js и app.js добавлен прямой вызов API через нативный движок Chromium с передачей сырых данных в мост.
 - Результат: Устранены блокировки CORS и 403 Forbidden, данные матчей успешно загружаются через нативный сетевой стек браузера.
+ 
+## Ветка: android-apk
+- Заголовок: Установка фирменной иконки и темы MatchFeed для Android
+- Причина: Приложение отображалось со стандартной зеленой иконкой и графикой шаблона SmartWebView (swv) вместо фирменного знака MatchFeed.
+- Что сделано: Сгенерированы адаптивные (foreground/background) и классические (square/round) иконки ic_launcher для всех 5 плотностей mipmap (mdpi, hdpi, xhdpi, xxhdpi, xxxhdpi). Обновлен AndroidManifest.xml (добавлен roundIcon). Заменен шаблонный баннер front_splash на фирменный логотип MatchFeed. В colors.xml и themes.xml зеленые акценты заменены на фирменную палитру (#111827, #2563EB, splashBackground).
+- Результат: Приложение отображает фирменную иконку с кубком MatchFeed на всех экранах и лаунчерах Android, splash screen и нативные элементы приведены к единому стилю бренда.
