@@ -169,4 +169,8 @@
 - Что сделано: Добавлена аннотация @SuppressWarnings("deprecation") к методу fcm_token.
 - Результат: Предупреждение компилятора и IDE устранено, сборка в GitHub Actions успешно завершена с созданием артефакта APK.
 
-
+## Ветка: develop
+- Заголовок: Синхронизация стабильных веток android-apk и android-apk-beta в develop со сборкой APK
+- Причина: Объединение проверенных исправлений функционала (коэффициенты, YouTube, профили игроков, H2H, Android JSBridge) в ветку develop и настройка CI для ветки develop.
+- Что сделано: Ветка develop обновлена до единого актуального состояния веток android-apk и android-apk-beta; в .github/workflows/build-apk.yml добавлен триггер для ветки develop; запущен пайплайн сборки в GitHub Actions.
+- Результат: Сборка в GitHub Actions успешно завершена (run ID 35530572023, статус success), сгенерирован и доступен для скачивания итоговый артефакт MatchFeed-debug-apk.
