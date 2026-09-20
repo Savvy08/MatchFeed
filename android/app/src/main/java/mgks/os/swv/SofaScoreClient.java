@@ -1210,6 +1210,20 @@ public class SofaScoreClient {
             String dtStr = ts > 0 ? sdf.format(new Date(ts * 1000L)) : "-";
             JSONObject tourn = e.optJSONObject("tournament");
 
+            StringBuilder setsSb = new StringBuilder();
+            for (int p = 1; p <= 7; p++) {
+                String key = "period" + p;
+                if ((hs != null && hs.has(key)) || (aws != null && aws.has(key))) {
+                    Object p1 = hs != null ? hs.opt(key) : null;
+                    Object p2 = aws != null ? aws.opt(key) : null;
+                    if (p1 != null || p2 != null) {
+                        if (setsSb.length() > 0) setsSb.append(", ");
+                        setsSb.append(p1 != null ? p1 : 0).append("-").append(p2 != null ? p2 : 0);
+                    }
+                }
+            }
+            String setsStr = setsSb.toString();
+
             JSONObject m = new JSONObject();
             try {
                 m.put("id", eid);
@@ -1217,6 +1231,8 @@ public class SofaScoreClient {
                 m.put("startTimestamp", ts);
                 m.put("won", won != null ? won : JSONObject.NULL);
                 m.put("score", (pSets != null ? pSets : 0) + ":" + (oSets != null ? oSets : 0));
+                m.put("scoreStr", (pSets != null ? pSets : 0) + " - " + (oSets != null ? oSets : 0));
+                m.put("setsStr", setsStr);
                 m.put("opponent", opp != null ? ruName(opp, "name") : "Соперник");
                 m.put("tournament", ruName(tourn, "name"));
             } catch (Exception ignored) {}
@@ -1227,28 +1243,54 @@ public class SofaScoreClient {
             }
 
             if (directList != null && oppId != null && opp != null && String.valueOf(opp.opt("id")).equals(oppId)) {
-                directList.add(m);
+                JSONObject dm = new JSONObject();
+                try {
+                    dm.put("id", eid);
+                    dm.put("date", dtStr);
+                    dm.put("startTimestamp", ts);
+                    dm.put("tournament", ruName(tourn, "name"));
+                    dm.put("homeTeam", ht != null ? ruName(ht, "name") : "Игрок 1");
+                    dm.put("awayTeam", at != null ? ruName(at, "name") : "Игрок 2");
+                    Object hCur = hs != null ? hs.opt("current") : null;
+                    Object aCur = aws != null ? aws.opt("current") : null;
+                    dm.put("homeScore", hCur);
+                    dm.put("awayScore", aCur);
+                    dm.put("scoreStr", (hCur != null ? hCur : "-") + " - " + (aCur != null ? aCur : "-"));
+                    dm.put("winnerCode", wc);
+                    dm.put("setsStr", setsStr);
+                    directList.add(dm);
+                } catch (Exception ignored) {}
             }
         }
     }
 
-    private static String calcStreak(List<JSONObject> formList) {
-        if (formList.isEmpty()) return "Нет серии";
-        JSONObject first = formList.get(0);
-        if (first.isNull("won")) return "Нет серии";
-        boolean firstWon = first.optBoolean("won");
-        int count = 0;
-        for (JSONObject m : formList) {
-            if (!m.isNull("won") && m.optBoolean("won") == firstWon) {
-                count++;
-            } else {
-                break;
+    private static JSONObject calcStreak(List<JSONObject> formList) {
+        JSONObject res = new JSONObject();
+        try {
+            res.put("type", "none");
+            res.put("count", 0);
+            res.put("text", "Нет данных");
+            if (formList == null || formList.isEmpty()) return res;
+            JSONObject first = formList.get(0);
+            if (first.isNull("won")) return res;
+            boolean firstWon = first.optBoolean("won");
+            int count = 0;
+            for (JSONObject m : formList) {
+                if (!m.isNull("won") && m.optBoolean("won") == firstWon) {
+                    count++;
+                } else {
+                    break;
+                }
             }
-        }
-        if (count == 0) return "Нет серии";
-        String ending = (count == 1) ? "победа" : ((count >= 2 && count <= 4) ? "победы" : "побед");
-        if (!firstWon) ending = (count == 1) ? "поражение" : ((count >= 2 && count <= 4) ? "поражения" : "поражений");
-        return count + " " + ending + " подряд";
+            if (count == 0) return res;
+            String t = firstWon ? "win" : "loss";
+            String ending = (count == 1) ? "победа" : ((count >= 2 && count <= 4) ? "победы" : "побед");
+            if (!firstWon) ending = (count == 1) ? "поражение" : ((count >= 2 && count <= 4) ? "поражения" : "поражений");
+            res.put("type", t);
+            res.put("count", count);
+            res.put("text", "Серия: " + count + " " + ending + " подряд");
+        } catch (Exception ignored) {}
+        return res;
     }
 
     // Action search
