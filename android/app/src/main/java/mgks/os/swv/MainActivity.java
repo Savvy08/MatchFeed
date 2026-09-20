@@ -881,6 +881,46 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
     @Override
     public boolean onKeyDown(int keyCode, @NonNull KeyEvent event) {
         if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_BACK) {
+            if (SWVContext.asw_view != null) {
+                SWVContext.asw_view.evaluateJavascript(
+                    "(function() {" +
+                    "  var m = document.getElementById('settings-modal') || document.getElementById('info-modal');" +
+                    "  if (m && m.classList.contains('open')) {" +
+                    "    if (typeof closeSettingsModal === 'function') closeSettingsModal(); else m.classList.remove('open');" +
+                    "    return true;" +
+                    "  }" +
+                    "  if (typeof currentView !== 'undefined' && currentView !== 'feed') {" +
+                    "    if (typeof navigateBack === 'function') { navigateBack(); return true; }" +
+                    "  }" +
+                    "  return false;" +
+                    "})()",
+                    result -> {
+                        if (!"true".equalsIgnoreCase(result)) {
+                            runOnUiThread(() -> {
+                                if (SWVContext.ASWP_EXIT_ON_BACK) {
+                                    if (SWVContext.ASWP_EXITDIAL) {
+                                        fns.ask_exit(MainActivity.this);
+                                    } else {
+                                        finish();
+                                    }
+                                    return;
+                                }
+                                if (SWVContext.asw_view != null && SWVContext.asw_view.canGoBack()) {
+                                    SWVContext.asw_view.goBack();
+                                } else {
+                                    if (SWVContext.ASWP_EXITDIAL) {
+                                        fns.ask_exit(MainActivity.this);
+                                    } else {
+                                        finish();
+                                    }
+                                }
+                            });
+                        }
+                    }
+                );
+                return true;
+            }
+
             if (SWVContext.ASWP_EXIT_ON_BACK) {
                 if (SWVContext.ASWP_EXITDIAL) {
                     fns.ask_exit(this);
@@ -890,7 +930,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
                 return true;
             }
 
-            if (SWVContext.asw_view.canGoBack()) {
+            if (SWVContext.asw_view != null && SWVContext.asw_view.canGoBack()) {
                 SWVContext.asw_view.goBack();
             } else {
                 if (SWVContext.ASWP_EXITDIAL) {

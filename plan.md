@@ -24,6 +24,14 @@
 - ~~Установка фирменной иконки приложения MatchFeed для Android~~
 - ~~Полный перенос данных и аналитики эталонной веб-версии в Android APK~~
 
+### ~~Ветка: android-apk-beta~~
+- ~~Подключение CronetProviderInstaller с безопасным фоллбэком~~
+- ~~Сетка cuptrees с объектами home, away, matchId, title~~
+- ~~Медиа и новости (новости newsArticles, YouTube плеер с youtubeId)~~
+- ~~SVG-фоллбэк аватарок при 404/ошибках сети~~
+- ~~Синхронизация окна «Настройки» (count, formattedSize)~~
+- ~~Обработка закрытия модальных окон по кнопке «Назад» в Android~~
+
 ### ~~Ветка: fix/bugs-v2~~
 - ~~Критический баг: rankHtml is not defined в профиле игрока (app.js и assets/app.js)~~
 - ~~Добавление темной темы для бейджа рейтинга игрока player-rank-badge (style.css и assets/style.css)~~
@@ -36,4 +44,4 @@
 
 ## Текущие задачи
 
-Все задачи ветки fix/bugs-v2 выполнены.
+Все задачи веток android-apk, android-apk-beta и fix/bugs-v2 успешно объединены в ветку Export-TEST-1.
