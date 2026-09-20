@@ -484,10 +484,11 @@ async function fetchMatches() {
       renderMatches();
     }
   } catch (err) {
-    if (window.location.protocol === 'file:') {
+    const isAndroidApp = window.navigator.userAgent.includes('MatchFeedApp');
+    if (window.location.protocol === 'file:' && !isAndroidApp) {
       showBanner('error', 'Запустите локальный сервер (php -S localhost:8000). Запуск через file:// не поддерживает PHP', false);
     } else {
-      showBanner('error', 'Ошибка подключения к серверу', true);
+      showBanner('error', 'Ошибка подключения к серверу. Проверьте интернет-соединение', true);
     }
   } finally {
     if (refreshIcon) refreshIcon.classList.remove('spinning');

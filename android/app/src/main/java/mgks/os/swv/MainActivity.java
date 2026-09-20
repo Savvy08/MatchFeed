@@ -190,6 +190,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
         }
 
         permissionManager = new PermissionManager(this);
+        SofaScoreClient.init(this);
 
         // Initialize the ActivityResultLauncher here, before it's needed
         fileUploadLauncher = registerForActivityResult(
@@ -1000,6 +1001,20 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
                     Log.e(TAG, "Failed to inject custom CSS.", e);
                 }
             }
+        }
+
+        @Override
+        public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+            if (request != null && request.getUrl() != null) {
+                String urlStr = request.getUrl().toString();
+                if (urlStr.contains("api.php")) {
+                    WebResourceResponse response = SofaScoreClient.handleRequest(request.getUrl());
+                    if (response != null) {
+                        return response;
+                    }
+                }
+            }
+            return super.shouldInterceptRequest(view, request);
         }
 
         @Override
