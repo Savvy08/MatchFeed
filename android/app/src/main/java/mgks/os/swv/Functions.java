@@ -276,8 +276,8 @@ public class Functions{
 			// Check if it's an external URL that should be opened outside
 			String host = aswm_host(url).toLowerCase(Locale.ROOT);
 			boolean isExcluded = false;
-			if (SWVContext.ASWV_EXC_LIST != null) {
-				for (String exc : SWVContext.ASWV_EXC_LIST) {
+			if (SWVContext.ASWV_EXC_LIST != null && !SWVContext.ASWV_EXC_LIST.trim().isEmpty()) {
+				for (String exc : SWVContext.ASWV_EXC_LIST.split(",")) {
 					String excClean = exc.trim().toLowerCase(Locale.ROOT);
 					if (!excClean.isEmpty() && (host.equals(excClean) || host.endsWith("." + excClean))) {
 						isExcluded = true;
