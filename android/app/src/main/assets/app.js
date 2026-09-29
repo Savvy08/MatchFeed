@@ -2658,11 +2658,25 @@ async function testConnection() {
 
   const startTime = performance.now();
   try {
-    const res = await apiGet({ action: 'live', sport: 'table-tennis', _test: 1 });
+    const res = await apiGet({ action: 'test_connection' });
     const duration = Math.round(performance.now() - startTime);
+    if (res && res.report) {
+      console.log('MatchFeed Diagnostic Report:\n' + res.report);
+      let diagBox = document.getElementById('connection-diagnostic-report');
+      if (!diagBox && statusMsg && statusMsg.parentElement) {
+        diagBox = document.createElement('pre');
+        diagBox.id = 'connection-diagnostic-report';
+        diagBox.style.cssText = 'white-space:pre-wrap; font-family:monospace; font-size:11px; background:#181818; color:#eee; padding:10px; border-radius:6px; margin-top:10px; max-height:260px; overflow-y:auto; user-select:text; -webkit-user-select:text; text-align:left; border:1px solid #333;';
+        statusMsg.parentElement.appendChild(diagBox);
+      }
+      if (diagBox) {
+        diagBox.textContent = res.report;
+        diagBox.style.display = 'block';
+      }
+    }
     if (res && res.success && Array.isArray(res.matches)) {
       if (statusMsg) {
-        statusMsg.textContent = `Успешно: получено ${res.matches.length} матчей (${duration} мс)`;
+        statusMsg.textContent = `Успешно: сервер доступен (${duration} мс)`;
         statusMsg.className = 'connection-status-text ok';
       }
     } else {

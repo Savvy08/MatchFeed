@@ -1,7 +1,11 @@
 package mgks.os.swv;
 
 import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.net.Uri;
+import android.text.TextUtils;
 import android.util.Log;
 import android.webkit.WebResourceResponse;
 
@@ -17,9 +21,14 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.Authenticator;
 import java.net.HttpURLConnection;
+import java.net.Inet4Address;
+import java.net.Inet6Address;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.NetworkInterface;
 import java.net.PasswordAuthentication;
 import java.net.Proxy;
+import java.net.Socket;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
@@ -29,6 +38,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -38,6 +48,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 
 // SofaScore client providing full parity with sofascore_api.py
 public class SofaScoreClient {
@@ -2117,20 +2130,265 @@ public class SofaScoreClient {
 
     public static String handleTestConnection() {
         long start = System.currentTimeMillis();
-        String testUrl = "https://api.sofascore.com/api/v1/sport/table-tennis/events/live";
-        String raw = fetchStringNetworkOnly(testUrl);
+        String report = runSofaScoreDiagnostic(appContext);
         long duration = System.currentTimeMillis() - start;
-        if (raw != null && raw.contains("events")) {
-            try {
-                JSONObject obj = new JSONObject(raw);
-                JSONArray events = obj.optJSONArray("events");
-                int count = events != null ? events.length() : 0;
-                return "{\"success\":true,\"matches\":[{\"count\":" + count + "}],\"duration\":" + duration + "}";
-            } catch (Exception ignored) {
-                return "{\"success\":true,\"matches\":[],\"duration\":" + duration + "}";
+        boolean success = report.contains("API access: OK");
+
+        try {
+            JSONObject res = new JSONObject();
+            res.put("success", success);
+            res.put("report", report);
+            res.put("duration", duration);
+            if (success) {
+                res.put("matches", new JSONArray("[{\"count\":1}]"));
+            } else {
+                res.put("error", "Сервер недоступен или блокируется");
+                res.put("matches", new JSONArray());
+            }
+            return res.toString();
+        } catch (Exception e) {
+            String escaped = report.replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "");
+            return "{\"success\":" + success + ",\"report\":\"" + escaped + "\",\"duration\":" + duration + ",\"matches\":[]}";
+        }
+    }
+
+    public static String runSofaScoreDiagnostic(Context context) {
+        StringBuilder sb = new StringBuilder();
+        final String TAG_DIAG = "MATCHFEED_DIAG";
+
+        autoLog(sb, TAG_DIAG, "=== MATCHFEED SOFASCORE DIAGNOSTIC ===");
+
+        // 1. Android Network State
+        try {
+            Context ctx = (context != null) ? context : appContext;
+            if (ctx != null) {
+                ConnectivityManager cm = (ConnectivityManager) ctx.getSystemService(Context.CONNECTIVITY_SERVICE);
+                if (cm != null) {
+                    Network activeNet = cm.getActiveNetwork();
+                    if (activeNet != null) {
+                        NetworkCapabilities caps = cm.getNetworkCapabilities(activeNet);
+                        if (caps != null) {
+                            autoLog(sb, TAG_DIAG, "Network: available");
+                            boolean isVpn = caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN);
+                            autoLog(sb, TAG_DIAG, "VPN: " + (isVpn ? "detected" : "not detected"));
+
+                            List<String> types = new ArrayList<>();
+                            if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) types.add("WIFI");
+                            if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) types.add("CELLULAR");
+                            if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) types.add("ETHERNET");
+                            if (isVpn) types.add("VPN");
+                            autoLog(sb, TAG_DIAG, "Network type: " + (types.isEmpty() ? "OTHER" : TextUtils.join(", ", types)));
+                        } else {
+                            autoLog(sb, TAG_DIAG, "Network: available (no capabilities)");
+                        }
+                    } else {
+                        autoLog(sb, TAG_DIAG, "Network: NO ACTIVE NETWORK");
+                    }
+                } else {
+                    autoLog(sb, TAG_DIAG, "Network: ConnectivityManager unavailable");
+                }
+            } else {
+                autoLog(sb, TAG_DIAG, "Network: context unavailable");
+            }
+
+            // Local IP check (IPv4 / IPv6 interfaces)
+            List<String> localIpv4 = new ArrayList<>();
+            List<String> localIpv6 = new ArrayList<>();
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            if (interfaces != null) {
+                while (interfaces.hasMoreElements()) {
+                    NetworkInterface nif = interfaces.nextElement();
+                    if (!nif.isUp() || nif.isLoopback()) continue;
+                    Enumeration<InetAddress> addrs = nif.getInetAddresses();
+                    while (addrs.hasMoreElements()) {
+                        InetAddress a = addrs.nextElement();
+                        if (a instanceof Inet4Address) {
+                            localIpv4.add(a.getHostAddress());
+                        } else if (a instanceof Inet6Address) {
+                            if (!a.isLinkLocalAddress()) {
+                                localIpv6.add(a.getHostAddress());
+                            }
+                        }
+                    }
+                }
+            }
+            autoLog(sb, TAG_DIAG, "Local IPv4: " + (localIpv4.isEmpty() ? "none" : TextUtils.join(", ", localIpv4)));
+            autoLog(sb, TAG_DIAG, "Local IPv6: " + (localIpv6.isEmpty() ? "none" : TextUtils.join(", ", localIpv6)));
+        } catch (Throwable t) {
+            autoLog(sb, TAG_DIAG, "Network state check error: " + t.getMessage());
+        }
+
+        // 2. DNS Resolution for api.sofascore.com
+        autoLog(sb, TAG_DIAG, "");
+        autoLog(sb, TAG_DIAG, "DNS:");
+        final String targetHost = "api.sofascore.com";
+        InetAddress[] resolved = null;
+        try {
+            long dnsStart = System.currentTimeMillis();
+            resolved = InetAddress.getAllByName(targetHost);
+            long dnsTime = System.currentTimeMillis() - dnsStart;
+            List<String> dnsIpv4 = new ArrayList<>();
+            List<String> dnsIpv6 = new ArrayList<>();
+            for (InetAddress a : resolved) {
+                if (a instanceof Inet4Address) {
+                    dnsIpv4.add(a.getHostAddress());
+                } else if (a instanceof Inet6Address) {
+                    dnsIpv6.add(a.getHostAddress());
+                }
+            }
+            autoLog(sb, TAG_DIAG, targetHost + " -> " + (dnsIpv4.isEmpty() ? "no IPv4" : TextUtils.join(", ", dnsIpv4)) + " (" + dnsTime + " ms)");
+            autoLog(sb, TAG_DIAG, "IPv6 -> " + (dnsIpv6.isEmpty() ? "none" : TextUtils.join(", ", dnsIpv6)));
+        } catch (Throwable t) {
+            autoLog(sb, TAG_DIAG, "DNS resolution FAILED for " + targetHost + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
+        }
+
+        // 3. TCP Handshake to port 443
+        autoLog(sb, TAG_DIAG, "");
+        Socket tcpSocket = null;
+        try {
+            tcpSocket = new Socket();
+            long tcpStart = System.currentTimeMillis();
+            tcpSocket.connect(new InetSocketAddress(targetHost, 443), 4000);
+            long tcpTime = System.currentTimeMillis() - tcpStart;
+            autoLog(sb, TAG_DIAG, "TCP: OK (" + tcpTime + " ms)");
+        } catch (Throwable t) {
+            autoLog(sb, TAG_DIAG, "TCP: FAILED (" + t.getClass().getSimpleName() + ": " + t.getMessage() + ")");
+        } finally {
+            if (tcpSocket != null) {
+                try { tcpSocket.close(); } catch (Exception ignored) {}
             }
         }
-        return "{\"success\":false,\"error\":\"Сервер недоступен или блокируется\",\"duration\":" + duration + "}";
+
+        // 4. TLS Handshake
+        SSLSocket sslSocket = null;
+        try {
+            SSLSocketFactory factory = (SSLSocketFactory) SSLSocketFactory.getDefault();
+            sslSocket = (SSLSocket) factory.createSocket();
+            long tlsStart = System.currentTimeMillis();
+            sslSocket.connect(new InetSocketAddress(targetHost, 443), 4000);
+            sslSocket.startHandshake();
+            long tlsTime = System.currentTimeMillis() - tlsStart;
+            SSLSession session = sslSocket.getSession();
+            autoLog(sb, TAG_DIAG, "TLS: OK (" + tlsTime + " ms, " + session.getProtocol() + ", " + session.getCipherSuite() + ")");
+        } catch (Throwable t) {
+            autoLog(sb, TAG_DIAG, "TLS: FAILED (" + t.getClass().getSimpleName() + ": " + t.getMessage() + ")");
+        } finally {
+            if (sslSocket != null) {
+                try { sslSocket.close(); } catch (Exception ignored) {}
+            }
+        }
+
+        // 5. HTTP Request via actual SofaScoreClient pipeline
+        autoLog(sb, TAG_DIAG, "");
+        final String testUrl = "https://api.sofascore.com/api/v1/sport/table-tennis/events/live";
+        String mode = currentConnectionMode != null ? currentConnectionMode : "direct";
+        autoLog(sb, TAG_DIAG, "HTTP Request Info:");
+        autoLog(sb, TAG_DIAG, "Endpoint: " + testUrl);
+        autoLog(sb, TAG_DIAG, "Mode: " + mode);
+        autoLog(sb, TAG_DIAG, "Transport: " + (cronetEngine != null ? "Cronet" : "HttpURLConnection"));
+        autoLog(sb, TAG_DIAG, "Timeout: connect=5000ms, read=7000ms");
+        autoLog(sb, TAG_DIAG, "Proxy configured: " + ((customProxyUrl != null && !customProxyUrl.isEmpty()) ? customProxyUrl : (STOCK_PROXY.isEmpty() ? "none" : STOCK_PROXY)));
+        autoLog(sb, TAG_DIAG, "Relay configured: " + ((configuredRelayUrl != null && !configuredRelayUrl.isEmpty()) ? configuredRelayUrl : "none"));
+
+        autoLog(sb, TAG_DIAG, "");
+        autoLog(sb, TAG_DIAG, "HTTP Execution:");
+        HttpURLConnection conn = null;
+        try {
+            long httpStart = System.currentTimeMillis();
+            conn = openConnection(testUrl);
+            int code = conn.getResponseCode();
+            long elapsed = System.currentTimeMillis() - httpStart;
+            autoLog(sb, TAG_DIAG, "Status: " + code);
+            autoLog(sb, TAG_DIAG, "Content-Type: " + conn.getContentType());
+            autoLog(sb, TAG_DIAG, "Elapsed: " + elapsed + " ms");
+
+            // Filtered safe headers
+            Map<String, List<String>> headers = conn.getHeaderFields();
+            if (headers != null) {
+                StringBuilder hsb = new StringBuilder();
+                for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
+                    String k = entry.getKey();
+                    if (k == null) continue;
+                    String kLower = k.toLowerCase(Locale.US);
+                    if (kLower.contains("auth") || kLower.contains("cookie") || kLower.contains("token") || kLower.contains("key") || kLower.contains("secret")) {
+                        continue;
+                    }
+                    hsb.append(k).append(": ").append(TextUtils.join(", ", entry.getValue())).append("; ");
+                }
+                autoLog(sb, TAG_DIAG, "Headers: " + (hsb.length() > 0 ? hsb.toString() : "none"));
+            }
+
+            // Body reading
+            InputStream is = (code >= 200 && code < 400) ? conn.getInputStream() : conn.getErrorStream();
+            String body = null;
+            if (is != null) {
+                body = readStream(is);
+            }
+            int bodyLen = body != null ? body.length() : 0;
+            autoLog(sb, TAG_DIAG, "Response size: " + bodyLen + " bytes");
+
+            // 6. Response Inspection
+            if (body != null && !body.isEmpty()) {
+                boolean isJson = false;
+                try {
+                    new JSONObject(body);
+                    isJson = true;
+                } catch (Exception e1) {
+                    try {
+                        new JSONArray(body);
+                        isJson = true;
+                    } catch (Exception ignored) {}
+                }
+
+                if (isJson) {
+                    if (body.contains("\"events\"")) {
+                        autoLog(sb, TAG_DIAG, "SofaScore response: VALID JSON");
+                        autoLog(sb, TAG_DIAG, "API access: OK");
+                    } else if (body.contains("\"error\"")) {
+                        autoLog(sb, TAG_DIAG, "SofaScore response: JSON ERROR");
+                        autoLog(sb, TAG_DIAG, "API access: BLOCKED/ERROR");
+                    } else {
+                        autoLog(sb, TAG_DIAG, "SofaScore response: VALID JSON (other structure)");
+                        autoLog(sb, TAG_DIAG, "API access: OK");
+                    }
+                } else {
+                    autoLog(sb, TAG_DIAG, "SofaScore response: NOT JSON");
+                    String lower = body.toLowerCase(Locale.US);
+                    if (lower.contains("cf-chl") || lower.contains("just a moment") || lower.contains("cloudflare") || lower.contains("attention required")) {
+                        autoLog(sb, TAG_DIAG, "Possible upstream/proxy/block response: CLOUDFLARE BOT/CHALLENGE");
+                    } else if (lower.contains("eais.rkn.gov.ru") || lower.contains("zapret") || lower.contains("доступ ограничен") || lower.contains("блокировк")) {
+                        autoLog(sb, TAG_DIAG, "Possible upstream/proxy/block response: ISP / RKN BLOCK PAGE");
+                    } else if (lower.contains("<html") || lower.contains("<!doctype")) {
+                        autoLog(sb, TAG_DIAG, "Possible upstream/proxy/block response: HTML ERROR/PROXY PAGE");
+                    } else {
+                        autoLog(sb, TAG_DIAG, "Possible upstream/proxy/block response: UNKNOWN NON-JSON PAYLOAD");
+                    }
+                }
+
+                String preview = body.length() > 400 ? body.substring(0, 400) + "..." : body;
+                preview = preview.replaceAll("[\\r\\n]+", " ");
+                autoLog(sb, TAG_DIAG, "Payload preview: " + preview);
+            } else {
+                autoLog(sb, TAG_DIAG, "SofaScore response: EMPTY BODY");
+            }
+        } catch (Throwable t) {
+            autoLog(sb, TAG_DIAG, "Exception: " + t.getClass().getName());
+            autoLog(sb, TAG_DIAG, "Message: " + t.getMessage());
+            autoLog(sb, TAG_DIAG, "Cause: " + (t.getCause() != null ? t.getCause().toString() : "None"));
+            Log.e(TAG_DIAG, "Full Diagnostic Exception Trace", t);
+        } finally {
+            if (conn != null) {
+                try { conn.disconnect(); } catch (Exception ignored) {}
+            }
+        }
+
+        autoLog(sb, TAG_DIAG, "=== END DIAGNOSTIC ===");
+        return sb.toString();
+    }
+
+    private static void autoLog(StringBuilder sb, String tag, String msg) {
+        sb.append(msg).append("\n");
+        Log.i(tag, msg);
     }
 
     private static HttpURLConnection openConnection(String urlStr) throws Exception {

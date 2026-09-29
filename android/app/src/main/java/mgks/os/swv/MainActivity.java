@@ -192,6 +192,16 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
         permissionManager = new PermissionManager(this);
         SofaScoreClient.init(this);
 
+        // Run network diagnostic test on startup in background thread
+        new Thread(() -> {
+            try {
+                Thread.sleep(1500);
+                SofaScoreClient.runSofaScoreDiagnostic(MainActivity.this);
+            } catch (Throwable t) {
+                Log.e("MATCHFEED_DIAG", "Startup diagnostic error", t);
+            }
+        }).start();
+
         // Initialize the ActivityResultLauncher here, before it's needed
         fileUploadLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
