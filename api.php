@@ -78,6 +78,11 @@ function runPython(array $args): array {
         $args[] = '--relay';
         $args[] = $relay;
     }
+    $proxy = trim($_GET['custom_proxy'] ?? '');
+    if ($proxy !== '') {
+        $args[] = '--proxy';
+        $args[] = $proxy;
+    }
 
     $cmdArgs = array_map('escapeshellarg', $args);
     $cmd = $pyBin . ' ' . escapeshellarg($script) . ' ' . implode(' ', $cmdArgs);

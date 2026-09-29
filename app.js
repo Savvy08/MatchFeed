@@ -412,12 +412,26 @@ function formatMatchTime(m) {
   return `<span>${escapeHtml(m.time || '--:--')}</span>`;
 }
 
+// Native bridge async callback registry
+const nativeBridgeCallbacks = {};
+window.onNativeApiResponse = function(requestId, responseData) {
+  if (nativeBridgeCallbacks[requestId]) {
+    try {
+      const parsed = typeof responseData === 'string' ? JSON.parse(responseData) : responseData;
+      nativeBridgeCallbacks[requestId](parsed);
+    } catch (e) {
+      nativeBridgeCallbacks[requestId]({ success: false, error: 'Ошибка разбора ответа' });
+    }
+    delete nativeBridgeCallbacks[requestId];
+  }
+};
+
 // Unified API client with fallback
 async function apiGet(params) {
   const isAndroidApp = window.navigator.userAgent.includes('MatchFeedApp') || (window.location.protocol === 'file:');
   const action = (params.action || 'live').toLowerCase();
 
-  // Attach connection mode & relay settings
+  // Attach connection mode & proxy settings
   const connSettings = getConnectionSettings();
   if (!params.conn_mode) {
     params.conn_mode = connSettings.mode || 'auto';
@@ -425,19 +439,50 @@ async function apiGet(params) {
   if (!params.relay_url && connSettings.relayUrl) {
     params.relay_url = connSettings.relayUrl;
   }
+  if (!params.relay2_url && connSettings.relay2Url) {
+    params.relay2_url = connSettings.relay2Url;
+  }
+  if (!params.custom_proxy && connSettings.customProxy) {
+    params.custom_proxy = connSettings.customProxy;
+  }
 
-  // Native bridge direct call for Android app
-  if (isAndroidApp && window.JSBridge && typeof window.JSBridge.apiCall === 'function') {
-    try {
-      const resStr = window.JSBridge.apiCall(action, JSON.stringify(params));
-      if (resStr && resStr.length > 5) {
-        const parsed = JSON.parse(resStr);
-        if (parsed && parsed.success === true) {
-          return parsed;
+  // Native bridge asynchronous call for Android app (non-blocking)
+  if (isAndroidApp && window.JSBridge) {
+    if (typeof window.JSBridge.apiCallAsync === 'function') {
+      return new Promise((resolve) => {
+        const reqId = 'req_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now();
+        const timer = setTimeout(() => {
+          if (nativeBridgeCallbacks[reqId]) {
+            delete nativeBridgeCallbacks[reqId];
+            resolve({ success: false, error: 'Время ожидания ответа истекло' });
+          }
+        }, 12000);
+
+        nativeBridgeCallbacks[reqId] = (data) => {
+          clearTimeout(timer);
+          resolve(data);
+        };
+
+        try {
+          window.JSBridge.apiCallAsync(reqId, action, JSON.stringify(params));
+        } catch (e) {
+          clearTimeout(timer);
+          delete nativeBridgeCallbacks[reqId];
+          resolve({ success: false, error: e.message });
         }
+      });
+    } else if (typeof window.JSBridge.apiCall === 'function') {
+      try {
+        const resStr = window.JSBridge.apiCall(action, JSON.stringify(params));
+        if (resStr && resStr.length > 5) {
+          const parsed = JSON.parse(resStr);
+          if (parsed && parsed.success === true) {
+            return parsed;
+          }
+        }
+      } catch (bridgeErr) {
+        console.warn('Native JSBridge.apiCall error, trying fetch fallback:', bridgeErr);
       }
-    } catch (bridgeErr) {
-      console.warn('Native JSBridge.apiCall error, trying fetch fallback:', bridgeErr);
     }
   }
 
@@ -1754,57 +1799,82 @@ function getMatchMediaHtml(data) {
 
 
 // Player profile & history view
+const playerSearchCache = new Map();
+let currentSearchQuery = '';
+
+function renderPlayerSearchResults(players, dropdown) {
+  if (!players || players.length === 0) {
+    dropdown.innerHTML = '<div style="padding: 12px; text-align: center; color: #9CA3AF; font-size: 13px;">Ничего не найдено</div>';
+    dropdown.classList.remove('hidden');
+    return;
+  }
+
+  let dHtml = '';
+  players.slice(0, 8).forEach(p => {
+    const isFoot = p.sport === 'football';
+    const sportBadge = isFoot
+      ? '<span class="sport-badge football">Футбол</span>'
+      : '<span class="sport-badge table-tennis">Н. теннис</span>';
+
+    dHtml += `
+      <button class="player-search-item" onclick="selectSearchedPlayer(${p.id}, '${escapeJs(p.name)}')">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <img src="api.php?action=image&id=${p.id}" class="search-avatar-img" alt="" onerror="this.style.opacity='0.2'">
+          <div>
+            <div class="search-item-name">${escapeHtml(p.name)}</div>
+            <div class="search-item-meta" style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+              ${sportBadge}
+              <span>${escapeHtml(p.country || '')}</span>
+            </div>
+          </div>
+        </div>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#9CA3AF" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+      </button>
+    `;
+  });
+
+  dropdown.innerHTML = dHtml;
+  dropdown.classList.remove('hidden');
+}
+
 function onPlayerSearchInput(val) {
   clearTimeout(playerSearchTimer);
   const q = val.trim();
   const dropdown = document.getElementById('player-search-results');
 
   if (q.length < 2) {
+    currentSearchQuery = '';
     if (dropdown) dropdown.classList.add('hidden');
     return;
   }
 
+  currentSearchQuery = q.toLowerCase();
+
+  // Instant response from memory cache
+  if (playerSearchCache.has(currentSearchQuery)) {
+    if (dropdown) renderPlayerSearchResults(playerSearchCache.get(currentSearchQuery), dropdown);
+    return;
+  }
+
   playerSearchTimer = setTimeout(async () => {
+    const activeQuery = currentSearchQuery;
     try {
       const data = await apiGet({ action: 'search', q: q });
-      if (!data || !data.success || !data.players || data.players.length === 0) {
-        if (dropdown) {
-          dropdown.innerHTML = '<div style="padding: 12px; text-align: center; color: #9CA3AF; font-size: 13px;">Ничего не найдено</div>';
-          dropdown.classList.remove('hidden');
-        }
-        return;
-      }
+      if (currentSearchQuery !== activeQuery) return; // Discard stale response
 
-      let dHtml = '';
-      data.players.slice(0, 8).forEach(p => {
-        const isFoot = p.sport === 'football';
-        const sportBadge = isFoot
-          ? '<span class="sport-badge football">Футбол</span>'
-          : '<span class="sport-badge table-tennis">Н. теннис</span>';
-
-        dHtml += `
-          <button class="player-search-item" onclick="selectSearchedPlayer(${p.id}, '${escapeJs(p.name)}')">
-            <div style="display:flex;align-items:center;gap:10px;">
-              <img src="api.php?action=image&id=${p.id}" class="search-avatar-img" alt="" onerror="this.style.opacity='0.2'">
-              <div>
-                <div class="search-item-name">${escapeHtml(p.name)}</div>
-                <div class="search-item-meta" style="display:flex;align-items:center;gap:6px;margin-top:2px;">
-                  ${sportBadge}
-                  <span>${escapeHtml(p.country || '')}</span>
-                </div>
-              </div>
-            </div>
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#9CA3AF" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-          </button>
-        `;
-      });
+      const players = (data && data.success && Array.isArray(data.players)) ? data.players : [];
+      playerSearchCache.set(activeQuery, players);
 
       if (dropdown) {
-        dropdown.innerHTML = dHtml;
+        renderPlayerSearchResults(players, dropdown);
+      }
+    } catch (e) {
+      if (dropdown && currentSearchQuery === activeQuery) {
+        dropdown.innerHTML = '<div style="padding: 12px; text-align: center; color: #9CA3AF; font-size: 13px;">Ничего не найдено</div>';
         dropdown.classList.remove('hidden');
       }
-    } catch (e) {}
-  }, 350);
+    }
+  }, 500);
 }
 
 function selectSearchedPlayer(id, name) {
@@ -2485,7 +2555,7 @@ async function checkAutoCleanCache() {
 
 // Настройки подключения и управление кэшем
 function getConnectionSettings() {
-  const defaults = { mode: 'auto', relayUrl: '' };
+  const defaults = { mode: 'auto', relayUrl: '', relay2Url: '', customProxy: '' };
   try {
     const raw = localStorage.getItem('matchfeed_connection_settings');
     return raw ? Object.assign(defaults, JSON.parse(raw)) : defaults;
@@ -2515,13 +2585,9 @@ function loadConnectionSettings() {
     if (parent) parent.classList.toggle('active', r.checked);
   });
 
-  const relayBox = document.getElementById('relay-config-box');
-  const relayInput = document.getElementById('relay-url-input');
-  if (relayInput) {
-    relayInput.value = settings.relayUrl || '';
-  }
-  if (relayBox) {
-    relayBox.style.display = (settings.mode === 'relay' || settings.mode === 'auto') ? 'block' : 'none';
+  const proxyInput = document.getElementById('custom-proxy-input');
+  if (proxyInput) {
+    proxyInput.value = settings.customProxy || '';
   }
 }
 
@@ -2535,11 +2601,6 @@ function handleConnectionModeChange(mode) {
     opt.classList.toggle('active', r && r.value === mode);
   });
 
-  const relayBox = document.getElementById('relay-config-box');
-  if (relayBox) {
-    relayBox.style.display = (mode === 'relay' || mode === 'auto') ? 'block' : 'none';
-  }
-
   const statusMsg = document.getElementById('connection-status-msg');
   if (statusMsg) {
     statusMsg.textContent = 'Режим сохранен';
@@ -2548,16 +2609,23 @@ function handleConnectionModeChange(mode) {
   }
 }
 
-function handleRelayUrlChange(url) {
+function handleCustomProxyChange(val) {
   const settings = getConnectionSettings();
-  settings.relayUrl = (url || '').trim();
+  settings.customProxy = (val || '').trim();
   saveConnectionSettings(settings);
+
+  const statusMsg = document.getElementById('connection-status-msg');
+  if (statusMsg) {
+    statusMsg.textContent = 'Прокси сохранен';
+    statusMsg.className = 'connection-status-text ok';
+    setTimeout(() => { if (statusMsg.textContent === 'Прокси сохранен') statusMsg.textContent = ''; }, 2000);
+  }
 }
 
-function resetDefaultRelayUrl() {
-  const relayInput = document.getElementById('relay-url-input');
-  if (relayInput) relayInput.value = '';
-  handleRelayUrlChange('');
+function resetDefaultProxy() {
+  const proxyInput = document.getElementById('custom-proxy-input');
+  if (proxyInput) proxyInput.value = '';
+  handleCustomProxyChange('');
 }
 
 async function testConnection() {

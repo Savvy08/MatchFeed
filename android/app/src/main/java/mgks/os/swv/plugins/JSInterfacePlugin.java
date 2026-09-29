@@ -41,6 +41,7 @@ import mgks.os.swv.SofaScoreClient;
 
 public class JSInterfacePlugin implements PluginInterface {
     private static final String TAG = "JSInterfacePlugin";
+    private static final java.util.concurrent.ExecutorService bgExecutor = java.util.concurrent.Executors.newFixedThreadPool(4);
     private Activity activity;
     private WebView webView;
     private Map<String, Object> config;
@@ -206,6 +207,36 @@ public class JSInterfacePlugin implements PluginInterface {
                 String msg = e.getMessage() != null ? e.getMessage().replace("\"", "\\\"") : "Ошибка API";
                 return "{\"success\":false,\"error\":\"" + msg + "\"}";
             }
+        }
+
+        // Async native call
+        @JavascriptInterface
+        public void apiCallAsync(final String requestId, final String action, final String paramsJson) {
+            bgExecutor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    String result;
+                    try {
+                        result = SofaScoreClient.executeApiCall(action, paramsJson);
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error in async apiCall: " + e.getMessage(), e);
+                        String msg = e.getMessage() != null ? e.getMessage().replace("\"", "\\\"") : "Ошибка API";
+                        result = "{\"success\":false,\"error\":\"" + msg + "\"}";
+                    }
+                    final String finalResult = result;
+                    if (activity != null && webView != null) {
+                        activity.runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                try {
+                                    String escaped = JSONObject.quote(finalResult);
+                                    webView.evaluateJavascript("window.onNativeApiResponse && window.onNativeApiResponse('" + requestId + "', " + escaped + ");", null);
+                                } catch (Exception ignored) {}
+                            }
+                        });
+                    }
+                }
+            });
         }
     }
 }

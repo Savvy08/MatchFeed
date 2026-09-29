@@ -141,20 +141,10 @@
               <input type="radio" name="conn_mode" value="auto" onchange="handleConnectionModeChange(this.value)" checked>
               <div class="mode-info">
                 <div class="mode-title-row">
-                  <span class="mode-title">Автоматический</span>
+                  <span class="mode-title">Автоматический выбор</span>
                   <span class="mode-badge">Рекомендуется</span>
                 </div>
-                <div class="mode-desc">Каскад: шлюз, авто-прокси, затем прямое соединение</div>
-              </div>
-            </label>
-
-            <label class="mode-option" id="mode-opt-relay">
-              <input type="radio" name="conn_mode" value="relay" onchange="handleConnectionModeChange(this.value)">
-              <div class="mode-info">
-                <div class="mode-title-row">
-                  <span class="mode-title">Прокси-шлюз</span>
-                </div>
-                <div class="mode-desc">Работает в РФ напрямую без использования VPN</div>
+                <div class="mode-desc">Оптимальный подбор лучшего канала связи</div>
               </div>
             </label>
 
@@ -162,9 +152,29 @@
               <input type="radio" name="conn_mode" value="proxy" onchange="handleConnectionModeChange(this.value)">
               <div class="mode-info">
                 <div class="mode-title-row">
-                  <span class="mode-title">Пул прокси</span>
+                  <span class="mode-title">Защищенный прокси</span>
                 </div>
-                <div class="mode-desc">Встроенная ротация резервных прокси-серверов</div>
+                <div class="mode-desc">Встроенный защищенный канал связи</div>
+              </div>
+            </label>
+
+            <label class="mode-option" id="mode-opt-relay1">
+              <input type="radio" name="conn_mode" value="relay1" onchange="handleConnectionModeChange(this.value)">
+              <div class="mode-info">
+                <div class="mode-title-row">
+                  <span class="mode-title">Основной сервер</span>
+                </div>
+                <div class="mode-desc">Выделенный европейский узел связи</div>
+              </div>
+            </label>
+
+            <label class="mode-option" id="mode-opt-relay2">
+              <input type="radio" name="conn_mode" value="relay2" onchange="handleConnectionModeChange(this.value)">
+              <div class="mode-info">
+                <div class="mode-title-row">
+                  <span class="mode-title">Резервный сервер</span>
+                </div>
+                <div class="mode-desc">Резервный канал высокой доступности</div>
               </div>
             </label>
 
@@ -174,17 +184,17 @@
                 <div class="mode-title-row">
                   <span class="mode-title">Прямое подключение</span>
                 </div>
-                <div class="mode-desc">Для пользователей за рубежом или со своим VPN</div>
+                <div class="mode-desc">Прямой доступ к поставщикам данных</div>
               </div>
             </label>
           </div>
 
-          <!-- Настройка адреса шлюза -->
-          <div id="relay-config-box" class="settings-config-box">
-            <div class="settings-sub-label">Адрес сервера-шлюза (Relay URL)</div>
+          <!-- Пользовательский прокси -->
+          <div class="settings-config-box">
+            <div class="settings-sub-label">Пользовательский прокси-сервер</div>
             <div class="settings-input-group">
-              <input type="text" id="relay-url-input" class="settings-input" placeholder="https://ваш-шлюз.workers.dev" onchange="handleRelayUrlChange(this.value)">
-              <button class="settings-mini-btn" onclick="resetDefaultRelayUrl()">Сброс</button>
+              <input type="text" id="custom-proxy-input" class="settings-input" placeholder="Используется встроенный защищенный прокси" onchange="handleCustomProxyChange(this.value)">
+              <button class="settings-mini-btn" onclick="resetDefaultProxy()">Сброс</button>
             </div>
           </div>
 

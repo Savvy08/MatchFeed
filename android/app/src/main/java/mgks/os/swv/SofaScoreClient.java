@@ -15,8 +15,10 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.net.Authenticator;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
+import java.net.PasswordAuthentication;
 import java.net.Proxy;
 import java.net.URL;
 import java.net.URLDecoder;
@@ -45,6 +47,9 @@ public class SofaScoreClient {
     private static File cacheDir;
     private static String currentConnectionMode = "auto";
     private static String configuredRelayUrl = "";
+    private static String configuredRelay2Url = "";
+    private static String customProxyUrl = "";
+    private static final String STOCK_PROXY = "socks5://qwF2DW:YTTxrt@45.130.63.240:8000";
 
     // Reliable fallback proxy endpoints for sports data
     private static final String[] PROXY_SERVERS = new String[] {
@@ -343,6 +348,12 @@ public class SofaScoreClient {
         }
         if (params.containsKey("relay_url")) {
             configuredRelayUrl = params.get("relay_url");
+        }
+        if (params.containsKey("relay2_url")) {
+            configuredRelay2Url = params.get("relay2_url");
+        }
+        if (params.containsKey("custom_proxy")) {
+            customProxyUrl = params.get("custom_proxy");
         }
 
         try {
@@ -1890,27 +1901,29 @@ public class SofaScoreClient {
         String mode = currentConnectionMode;
         if (mode == null || mode.isEmpty()) mode = "auto";
 
-        if ("relay".equalsIgnoreCase(mode)) {
-            String res = fetchViaRelay(urlStr);
-            if (res != null) return res;
-        } else if ("proxy".equalsIgnoreCase(mode)) {
+        if ("proxy".equalsIgnoreCase(mode)) {
+            return fetchViaProxy(urlStr);
+        } else if ("relay1".equalsIgnoreCase(mode) || "relay".equalsIgnoreCase(mode)) {
+            return fetchViaRelay(urlStr, configuredRelayUrl);
+        } else if ("relay2".equalsIgnoreCase(mode)) {
+            return fetchViaRelay(urlStr, configuredRelay2Url);
+        } else if ("direct".equalsIgnoreCase(mode)) {
+            return fetchDirect(urlStr);
+        } else {
+            // Auto mode: try proxy -> relay1 -> relay2 -> direct
             String res = fetchViaProxy(urlStr);
             if (res != null) return res;
-        } else if ("direct".equalsIgnoreCase(mode)) {
-            String res = fetchDirect(urlStr);
-            if (res != null) return res;
-        } else {
-            // Auto mode: relay (if set) -> direct -> proxy
+
             if (configuredRelayUrl != null && !configuredRelayUrl.trim().isEmpty()) {
-                String res = fetchViaRelay(urlStr);
+                res = fetchViaRelay(urlStr, configuredRelayUrl);
                 if (res != null) return res;
             }
-            String res = fetchDirect(urlStr);
-            if (res != null) return res;
-            res = fetchViaProxy(urlStr);
-            if (res != null) return res;
+            if (configuredRelay2Url != null && !configuredRelay2Url.trim().isEmpty()) {
+                res = fetchViaRelay(urlStr, configuredRelay2Url);
+                if (res != null) return res;
+            }
+            return fetchDirect(urlStr);
         }
-        return null;
     }
 
     private static String fetchDirect(String urlStr) {
@@ -1933,11 +1946,11 @@ public class SofaScoreClient {
         return null;
     }
 
-    private static String fetchViaRelay(String urlStr) {
-        if (configuredRelayUrl == null || configuredRelayUrl.trim().isEmpty()) return null;
+    private static String fetchViaRelay(String urlStr, String relayUrl) {
+        if (relayUrl == null || relayUrl.trim().isEmpty()) return null;
         HttpURLConnection conn = null;
         try {
-            String relay = configuredRelayUrl.trim();
+            String relay = relayUrl.trim();
             String target;
             if (relay.contains("?url=")) {
                 target = relay + URLEncoder.encode(urlStr, "UTF-8");
@@ -1950,10 +1963,10 @@ public class SofaScoreClient {
             }
             URL u = new URL(target);
             conn = (HttpURLConnection) u.openConnection();
-            conn.setRequestProperty("User-Agent", "MatchFeedApp/2.1 (Android)");
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36");
             conn.setRequestProperty("Accept", "application/json, text/plain, */*");
-            conn.setConnectTimeout(8000);
-            conn.setReadTimeout(8000);
+            conn.setConnectTimeout(2500);
+            conn.setReadTimeout(3000);
             int code = conn.getResponseCode();
             if (code == 200) {
                 return readStream(conn.getInputStream());
@@ -1971,32 +1984,71 @@ public class SofaScoreClient {
     }
 
     private static String fetchViaProxy(String urlStr) {
-        for (String proxyEntry : PROXY_SERVERS) {
-            HttpURLConnection conn = null;
-            try {
-                String[] parts = proxyEntry.split(":");
-                String host = parts[0];
-                int port = Integer.parseInt(parts[1]);
-                Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(host, port));
-                URL u = new URL(urlStr);
-                conn = (HttpURLConnection) u.openConnection(proxy);
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36");
-                conn.setRequestProperty("Origin", "https://www.sofascore.com");
-                conn.setRequestProperty("Referer", "https://www.sofascore.com/");
-                conn.setRequestProperty("Accept", "application/json, text/plain, */*");
-                conn.setRequestProperty("Accept-Language", "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
-                conn.setConnectTimeout(5000);
-                conn.setReadTimeout(5000);
-                int code = conn.getResponseCode();
-                if (code == 200) {
-                    return readStream(conn.getInputStream());
+        String pStr = (customProxyUrl != null && !customProxyUrl.trim().isEmpty())
+                ? customProxyUrl.trim() : STOCK_PROXY;
+        if (pStr.isEmpty()) return null;
+
+        HttpURLConnection conn = null;
+        try {
+            boolean isSocks = pStr.startsWith("socks5://") || pStr.startsWith("socks://") || pStr.startsWith("socks4://");
+            String cleaned = pStr.replaceFirst("^[a-zA-Z0-9]+://", "");
+            String user = null;
+            String pass = null;
+            if (cleaned.contains("@")) {
+                int atIdx = cleaned.indexOf("@");
+                String auth = cleaned.substring(0, atIdx);
+                cleaned = cleaned.substring(atIdx + 1);
+                if (auth.contains(":")) {
+                    String[] userPass = auth.split(":", 2);
+                    user = userPass[0];
+                    pass = userPass[1];
+                } else {
+                    user = auth;
                 }
-            } catch (Exception e) {
-                Log.d(TAG, "Proxy " + proxyEntry + " failed for " + urlStr);
-            } finally {
-                if (conn != null) {
-                    try { conn.disconnect(); } catch (Exception ignored) {}
-                }
+            }
+
+            String host;
+            int port = isSocks ? 1080 : 8080;
+            if (cleaned.contains(":")) {
+                String[] hostPort = cleaned.split(":", 2);
+                host = hostPort[0];
+                try { port = Integer.parseInt(hostPort[1]); } catch (Exception ignored) {}
+            } else {
+                host = cleaned;
+            }
+
+            if (user != null && pass != null) {
+                final String finalUser = user;
+                final String finalPass = pass;
+                Authenticator.setDefault(new Authenticator() {
+                    @Override
+                    protected PasswordAuthentication getPasswordAuthentication() {
+                        return new PasswordAuthentication(finalUser, finalPass.toCharArray());
+                    }
+                });
+            }
+
+            Proxy proxy = new Proxy(isSocks ? Proxy.Type.SOCKS : Proxy.Type.HTTP, new InetSocketAddress(host, port));
+            URL u = new URL(urlStr);
+            conn = (HttpURLConnection) u.openConnection(proxy);
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36");
+            conn.setRequestProperty("Origin", "https://www.sofascore.com");
+            conn.setRequestProperty("Referer", "https://www.sofascore.com/");
+            conn.setRequestProperty("Accept", "application/json, text/plain, */*");
+            conn.setRequestProperty("Accept-Language", "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
+            conn.setConnectTimeout(2500);
+            conn.setReadTimeout(3000);
+            int code = conn.getResponseCode();
+            if (code == 200) {
+                return readStream(conn.getInputStream());
+            } else {
+                Log.w(TAG, "Proxy HTTP " + code + " for " + urlStr);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Proxy error for " + urlStr + ": " + e.getMessage());
+        } finally {
+            if (conn != null) {
+                try { conn.disconnect(); } catch (Exception ignored) {}
             }
         }
         return null;
@@ -2027,7 +2079,7 @@ public class SofaScoreClient {
                 return "{\"success\":true,\"matches\":[],\"duration\":" + duration + "}";
             }
         }
-        return "{\"success\":false,\"error\":\"HTTP 403 или сервер недоступен\",\"duration\":" + duration + "}";
+        return "{\"success\":false,\"error\":\"Сервер недоступен или блокируется\",\"duration\":" + duration + "}";
     }
 
     private static HttpURLConnection openConnection(String urlStr) throws Exception {
@@ -2048,8 +2100,8 @@ public class SofaScoreClient {
         conn.setRequestProperty("Referer", "https://www.sofascore.com/");
         conn.setRequestProperty("Accept", "application/json, text/plain, */*");
         conn.setRequestProperty("Accept-Language", "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
-        conn.setConnectTimeout(8000);
-        conn.setReadTimeout(8000);
+        conn.setConnectTimeout(2500);
+        conn.setReadTimeout(3000);
         return conn;
     }
 

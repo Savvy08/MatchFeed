@@ -21,8 +21,10 @@ from curl_cffi import requests
 from curl_cffi.curl import CurlOpt
 
 # Извлечение параметров режима подключения
+STOCK_PROXY = "socks5://qwF2DW:YTTxrt@45.130.63.240:8000"
 CLI_MODE = "auto"
 CLI_RELAY = ""
+CLI_PROXY = ""
 clean_argv = []
 skip_next = False
 for idx, arg in enumerate(sys.argv):
@@ -34,6 +36,9 @@ for idx, arg in enumerate(sys.argv):
         skip_next = True
     elif arg == "--relay" and idx + 1 < len(sys.argv):
         CLI_RELAY = sys.argv[idx + 1].strip()
+        skip_next = True
+    elif arg == "--proxy" and idx + 1 < len(sys.argv):
+        CLI_PROXY = sys.argv[idx + 1].strip()
         skip_next = True
     else:
         clean_argv.append(arg)
@@ -64,6 +69,10 @@ def load_config():
     env_proxy = os.getenv("SOFASCORE_PROXY", "").strip()
     if env_proxy:
         defaults["proxy"] = env_proxy
+    if CLI_PROXY:
+        defaults["proxy"] = CLI_PROXY
+    elif not defaults.get("proxy") and (CLI_MODE in ("proxy", "auto")):
+        defaults["proxy"] = STOCK_PROXY
     if CLI_RELAY:
         defaults["relay_url"] = CLI_RELAY
     if CLI_MODE:

@@ -598,16 +598,16 @@ body {
 .connection-mode-group {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 7px;
 }
 
 .mode-option {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 12px 14px;
+  gap: 10px;
+  padding: 9px 12px;
   border: 1.5px solid #E5E7EB;
-  border-radius: 12px;
+  border-radius: 10px;
   cursor: pointer;
   background: #F9FAFB;
   transition: border-color 0.15s, background-color 0.15s;
