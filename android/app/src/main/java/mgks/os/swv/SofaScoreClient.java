@@ -1725,10 +1725,10 @@ public class SofaScoreClient {
     public static String handleSearchAction(String q) {
         if (q == null || q.trim().isEmpty()) return "{\"success\":true,\"players\":[]}";
         try {
-            String url = "https://api.sofascore.com/api/v1/search/all?q=" + URLEncoder.encode(q, "UTF-8");
+            String url = "https://api.sofascore.com/api/v1/search/" + URLEncoder.encode(q, "UTF-8");
             String rawJson = fetchString(url);
             if (rawJson == null) {
-                url = "https://api.sofascore.app/api/v1/search/all?q=" + URLEncoder.encode(q, "UTF-8");
+                url = "https://api.sofascore.app/api/v1/search/" + URLEncoder.encode(q, "UTF-8");
                 rawJson = fetchString(url);
             }
             return parseSearchJson(rawJson);
@@ -1751,16 +1751,16 @@ public class SofaScoreClient {
                 for (int i = 0; i < results.length(); i++) {
                     JSONObject r = results.optJSONObject(i);
                     if (r == null) continue;
-                    String type = r.optString("type", "");
-                    if (!type.equals("player") && !type.equals("team")) continue;
-
                     JSONObject entity = r.optJSONObject("entity");
                     if (entity == null) continue;
 
-                    JSONObject cat = entity.optJSONObject("country");
                     JSONObject sportObj = entity.optJSONObject("sport");
                     String sportSlug = sportObj != null ? sportObj.optString("slug", "") : "";
+                    if (!sportSlug.isEmpty() && !sportSlug.equals("table-tennis") && !sportSlug.equals("tennis") && !sportSlug.equals("football")) {
+                        continue;
+                    }
 
+                    JSONObject cat = entity.optJSONObject("country");
                     JSONObject p = new JSONObject();
                     p.put("id", entity.opt("id"));
                     p.put("name", ruName(entity, "name"));
