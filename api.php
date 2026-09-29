@@ -67,6 +67,23 @@ function findPythonBinary(): string {
 function runPython(array $args): array {
     $pyBin = findPythonBinary();
     $script = __DIR__ . DIRECTORY_SEPARATOR . 'sofascore_api.py';
+
+    $mode = trim($_GET['conn_mode'] ?? $_GET['connection_mode'] ?? '');
+    if ($mode !== '') {
+        $args[] = '--mode';
+        $args[] = $mode;
+    }
+    $relay = trim($_GET['relay_url'] ?? '');
+    if ($relay !== '') {
+        $args[] = '--relay';
+        $args[] = $relay;
+    }
+    $proxy = trim($_GET['custom_proxy'] ?? '');
+    if ($proxy !== '') {
+        $args[] = '--proxy';
+        $args[] = $proxy;
+    }
+
     $cmdArgs = array_map('escapeshellarg', $args);
     $cmd = $pyBin . ' ' . escapeshellarg($script) . ' ' . implode(' ', $cmdArgs);
 
@@ -264,6 +281,28 @@ if ($action === 'image') {
     // Default SVG fallback avatar
     header('Content-Type: image/svg+xml');
     echo '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#9CA3AF"><circle cx="24" cy="24" r="24" fill="#E5E7EB"/><path d="M24 23a6 6 0 1 0 0-12 6 6 0 0 0 0 12zm0 4c-6.67 0-14 3.33-14 10v1h28v-1c0-6.67-7.33-10-14-10z"/></svg>';
+    exit;
+}
+
+// Action: test_connection
+if ($action === 'test_connection') {
+    $start = microtime(true);
+    $data = runPython(['live', 'table-tennis']);
+    $duration = (int)(round((microtime(true) - $start) * 1000));
+    if (!empty($data['success']) && isset($data['matches'])) {
+        echo json_encode([
+            'success' => true,
+            'matches' => [['count' => count($data['matches'])]],
+            'duration' => $duration
+        ], JSON_UNESCAPED_UNICODE);
+    } else {
+        $err = $data['error'] ?? 'Сервер недоступен';
+        echo json_encode([
+            'success' => false,
+            'error' => $err,
+            'duration' => $duration
+        ], JSON_UNESCAPED_UNICODE);
+    }
     exit;
 }
 

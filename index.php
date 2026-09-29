@@ -122,6 +122,146 @@
       </div>
     </div>
 
+    <!-- Настройки -->
+    <div id="settings-view" class="app-view hidden">
+      <div class="view-sub-header">
+        <button class="view-back-btn" onclick="navigateBack()" aria-label="Назад">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          <span>Назад</span>
+        </button>
+        <span class="view-header-title">Настройки</span>
+        <div style="width: 72px;" aria-hidden="true"></div>
+      </div>
+
+      <div class="view-body settings-view-body">
+        <!-- Режим подключения -->
+        <div class="settings-card">
+          <div class="settings-card-header">
+            <div class="settings-card-title">Режим подключения</div>
+            <div class="settings-card-desc">Выберите способ связи с серверами данных</div>
+          </div>
+
+          <div class="connection-mode-group">
+            <label class="mode-option" id="mode-opt-direct">
+              <input type="radio" name="conn_mode" value="direct" onchange="handleConnectionModeChange(this.value)" checked>
+              <div class="mode-info">
+                <div class="mode-title-row">
+                  <span class="mode-title">Прямое подключение</span>
+                  <span class="mode-badge">Рекомендуется</span>
+                </div>
+                <div class="mode-desc">Прямой доступ к поставщикам данных (Cronet)</div>
+              </div>
+            </label>
+
+            <label class="mode-option" id="mode-opt-auto">
+              <input type="radio" name="conn_mode" value="auto" onchange="handleConnectionModeChange(this.value)">
+              <div class="mode-info">
+                <div class="mode-title-row">
+                  <span class="mode-title">Автоматический выбор</span>
+                </div>
+                <div class="mode-desc">Оптимальный подбор лучшего канала связи</div>
+              </div>
+            </label>
+
+            <label class="mode-option" id="mode-opt-proxy">
+              <input type="radio" name="conn_mode" value="proxy" onchange="handleConnectionModeChange(this.value)">
+              <div class="mode-info">
+                <div class="mode-title-row">
+                  <span class="mode-title">Защищенный прокси</span>
+                </div>
+                <div class="mode-desc">Встроенный защищенный канал связи</div>
+              </div>
+            </label>
+
+            <label class="mode-option" id="mode-opt-relay1">
+              <input type="radio" name="conn_mode" value="relay1" onchange="handleConnectionModeChange(this.value)">
+              <div class="mode-info">
+                <div class="mode-title-row">
+                  <span class="mode-title">Основной сервер</span>
+                </div>
+                <div class="mode-desc">Выделенный узел связи (Render)</div>
+              </div>
+            </label>
+          </div>
+
+          <!-- Пользовательский прокси -->
+          <div class="settings-config-box">
+            <div class="settings-sub-label">Пользовательский прокси-сервер</div>
+            <div class="settings-input-group">
+              <input type="text" id="custom-proxy-input" class="settings-input" placeholder="socks5://логин:пароль@ip:порт" onchange="handleCustomProxyChange(this.value)">
+              <button class="settings-mini-btn" onclick="resetDefaultProxy()">Сброс</button>
+            </div>
+            <div class="settings-input-hint">Примеры: socks5://user:pass@host:port, http://user:pass@host:port или host:port</div>
+          </div>
+
+          <!-- Проверка соединения -->
+          <div class="connection-test-row">
+            <button id="test-connection-btn" class="settings-action-btn" onclick="testConnection()">Проверить соединение</button>
+            <div id="connection-status-msg" class="connection-status-text"></div>
+          </div>
+        </div>
+
+        <!-- Управление кэшем -->
+        <div class="settings-card">
+          <div class="settings-card-header">
+            <div class="settings-card-title">Управление кэшем</div>
+            <div class="settings-card-desc">Хранение профилей, матчей и графики на устройстве</div>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-label-group">
+              <span class="settings-label">Занято на устройстве</span>
+              <span id="cache-size-display" class="settings-desc">Подсчет...</span>
+            </div>
+            <button id="clear-cache-btn" class="settings-action-btn" onclick="handleClearCache()">Очистить кэш</button>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-label-group">
+              <span class="settings-label">Автоочистка кэша</span>
+              <span class="settings-desc">Удалять устаревшие файлы автоматически</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="auto-clean-toggle" onchange="handleToggleAutoClean(this.checked)" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div id="cache-period-row" class="settings-row">
+            <div class="settings-label-group">
+              <span class="settings-label">Срок хранения кэша</span>
+              <span class="settings-desc">Период перед удалением</span>
+            </div>
+            <select id="cache-period-select" class="settings-select" onchange="handleChangeCachePeriod(this.value)">
+              <option value="7">7 дней</option>
+              <option value="14">14 дней</option>
+              <option value="21">21 день</option>
+              <option value="30">30 дней</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- О сервисе MatchFeed -->
+        <div class="settings-card">
+          <div class="settings-card-header">
+            <div class="settings-card-title">О сервисе MatchFeed</div>
+          </div>
+          <div class="modal-info-row">
+            <span class="modal-info-label">Версия</span>
+            <span class="modal-info-value">v2.1</span>
+          </div>
+          <div class="modal-info-row">
+            <span class="modal-info-label">Источник данных</span>
+            <span class="modal-info-value">SofaScore API</span>
+          </div>
+          <div class="modal-info-row">
+            <span class="modal-info-label">Авто-обновление</span>
+            <span class="modal-info-value">Каждые 30 секунд</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Нижнее меню -->
     <nav class="bottom-bar">
       <button class="nav-item active" id="nav-matches-btn" onclick="openMatchesFeed()" aria-label="Матчи">
@@ -136,76 +276,11 @@
         <?= getIcon('person', ['size' => 20, 'class' => 'nav-icon']) ?>
         <span>Игрок</span>
       </button>
-      <button class="nav-item" id="nav-settings-btn" onclick="openSettingsModal()" aria-label="Настройки">
+      <button class="nav-item" id="nav-settings-btn" onclick="openSettingsTab()" aria-label="Настройки">
         <?= getIcon('settings', ['size' => 20, 'class' => 'nav-icon']) ?>
         <span>Настройки</span>
       </button>
     </nav>
-
-    <!-- Модальное окно настроек -->
-    <div id="settings-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title" onclick="handleBackdropClick(event)">
-      <div class="modal-card">
-        <div class="modal-header">
-          <span id="settings-modal-title" class="modal-title">Настройки</span>
-          <button class="modal-close-btn" onclick="closeSettingsModal()" aria-label="Закрыть">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-          </button>
-        </div>
-        <div class="modal-body">
-          <div class="settings-section">
-            <div class="settings-section-title">Управление кэшем</div>
-            <div class="settings-row">
-              <div class="settings-label-group">
-                <span class="settings-label">Размер кэша</span>
-                <span id="cache-size-display" class="settings-desc">Подсчет...</span>
-              </div>
-              <button id="clear-cache-btn" class="settings-action-btn" onclick="handleClearCache()">Очистить кэш</button>
-            </div>
-            <div class="settings-row">
-              <div class="settings-label-group">
-                <span class="settings-label">Автоочистка кэша</span>
-                <span class="settings-desc">Удалять устаревшие файлы автоматически</span>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" id="auto-clean-toggle" onchange="handleToggleAutoClean(this.checked)" />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <div id="cache-period-row" class="settings-row">
-              <div class="settings-label-group">
-                <span class="settings-label">Срок хранения кэша</span>
-                <span class="settings-desc">Период перед удалением</span>
-              </div>
-              <select id="cache-period-select" class="settings-select" onchange="handleChangeCachePeriod(this.value)">
-                <option value="7">7 дней</option>
-                <option value="14">14 дней</option>
-                <option value="21">21 день</option>
-                <option value="30">30 дней</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="settings-section">
-            <div class="settings-section-title">О сервисе MatchFeed</div>
-            <div class="modal-info-row">
-              <span class="modal-info-label">Версия</span>
-              <span class="modal-info-value">v2.0</span>
-            </div>
-            <div class="modal-info-row">
-              <span class="modal-info-label">Источник данных</span>
-              <span class="modal-info-value">SofaScore</span>
-            </div>
-            <div class="modal-info-row">
-              <span class="modal-info-label">Авто-обновление</span>
-              <span class="modal-info-value">Каждые 30 секунд</span>
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="modal-btn-close" onclick="closeSettingsModal()">Закрыть</button>
-        </div>
-      </div>
-    </div>
 
 
   </div>

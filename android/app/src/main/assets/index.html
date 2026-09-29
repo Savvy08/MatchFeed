@@ -109,9 +109,150 @@
       <div id="player-view-content" class="view-body">
         <div class="player-empty-prompt">
           <div class="empty-state-icon">
-            <svg class="icon " viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>          </div>
+            <svg class="icon " viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+          </div>
           <div class="empty-state-title">Поиск игрока</div>
           <div class="empty-state-desc">Введите имя игрока в строке поиска или нажмите на имя в любом матче.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Настройки -->
+    <div id="settings-view" class="app-view hidden">
+      <div class="view-sub-header">
+        <button class="view-back-btn" onclick="navigateBack()" aria-label="Назад">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          <span>Назад</span>
+        </button>
+        <span class="view-header-title">Настройки</span>
+        <div style="width: 72px;" aria-hidden="true"></div>
+      </div>
+
+      <div class="view-body settings-view-body">
+        <!-- Режим подключения -->
+        <div class="settings-card">
+          <div class="settings-card-header">
+            <div class="settings-card-title">Режим подключения</div>
+            <div class="settings-card-desc">Выберите способ связи с серверами данных</div>
+          </div>
+
+          <div class="connection-mode-group">
+            <label class="mode-option" id="mode-opt-direct">
+              <input type="radio" name="conn_mode" value="direct" onchange="handleConnectionModeChange(this.value)" checked>
+              <div class="mode-info">
+                <div class="mode-title-row">
+                  <span class="mode-title">Прямое подключение</span>
+                  <span class="mode-badge">Рекомендуется</span>
+                </div>
+                <div class="mode-desc">Прямой доступ к поставщикам данных (Cronet)</div>
+              </div>
+            </label>
+
+            <label class="mode-option" id="mode-opt-auto">
+              <input type="radio" name="conn_mode" value="auto" onchange="handleConnectionModeChange(this.value)">
+              <div class="mode-info">
+                <div class="mode-title-row">
+                  <span class="mode-title">Автоматический выбор</span>
+                </div>
+                <div class="mode-desc">Оптимальный подбор лучшего канала связи</div>
+              </div>
+            </label>
+
+            <label class="mode-option" id="mode-opt-proxy">
+              <input type="radio" name="conn_mode" value="proxy" onchange="handleConnectionModeChange(this.value)">
+              <div class="mode-info">
+                <div class="mode-title-row">
+                  <span class="mode-title">Защищенный прокси</span>
+                </div>
+                <div class="mode-desc">Встроенный защищенный канал связи</div>
+              </div>
+            </label>
+
+            <label class="mode-option" id="mode-opt-relay1">
+              <input type="radio" name="conn_mode" value="relay1" onchange="handleConnectionModeChange(this.value)">
+              <div class="mode-info">
+                <div class="mode-title-row">
+                  <span class="mode-title">Основной сервер</span>
+                </div>
+                <div class="mode-desc">Выделенный узел связи (Render)</div>
+              </div>
+            </label>
+          </div>
+
+          <!-- Пользовательский прокси -->
+          <div class="settings-config-box">
+            <div class="settings-sub-label">Пользовательский прокси-сервер</div>
+            <div class="settings-input-group">
+              <input type="text" id="custom-proxy-input" class="settings-input" placeholder="socks5://логин:пароль@ip:порт" onchange="handleCustomProxyChange(this.value)">
+              <button class="settings-mini-btn" onclick="resetDefaultProxy()">Сброс</button>
+            </div>
+            <div class="settings-input-hint">Примеры: socks5://user:pass@host:port, http://user:pass@host:port или host:port</div>
+          </div>
+
+          <!-- Проверка соединения -->
+          <div class="connection-test-row">
+            <button id="test-connection-btn" class="settings-action-btn" onclick="testConnection()">Проверить соединение</button>
+            <div id="connection-status-msg" class="connection-status-text"></div>
+          </div>
+        </div>
+
+        <!-- Управление кэшем -->
+        <div class="settings-card">
+          <div class="settings-card-header">
+            <div class="settings-card-title">Управление кэшем</div>
+            <div class="settings-card-desc">Хранение профилей, матчей и графики на устройстве</div>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-label-group">
+              <span class="settings-label">Занято на устройстве</span>
+              <span id="cache-size-display" class="settings-desc">Подсчет...</span>
+            </div>
+            <button id="clear-cache-btn" class="settings-action-btn" onclick="handleClearCache()">Очистить кэш</button>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-label-group">
+              <span class="settings-label">Автоочистка кэша</span>
+              <span class="settings-desc">Удалять устаревшие файлы автоматически</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="auto-clean-toggle" onchange="handleToggleAutoClean(this.checked)" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div id="cache-period-row" class="settings-row">
+            <div class="settings-label-group">
+              <span class="settings-label">Срок хранения кэша</span>
+              <span class="settings-desc">Период перед удалением</span>
+            </div>
+            <select id="cache-period-select" class="settings-select" onchange="handleChangeCachePeriod(this.value)">
+              <option value="7">7 дней</option>
+              <option value="14">14 дней</option>
+              <option value="21">21 день</option>
+              <option value="30">30 дней</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- О сервисе MatchFeed -->
+        <div class="settings-card">
+          <div class="settings-card-header">
+            <div class="settings-card-title">О сервисе MatchFeed</div>
+          </div>
+          <div class="modal-info-row">
+            <span class="modal-info-label">Версия</span>
+            <span class="modal-info-value">v2.1</span>
+          </div>
+          <div class="modal-info-row">
+            <span class="modal-info-label">Источник данных</span>
+            <span class="modal-info-value">SofaScore API</span>
+          </div>
+          <div class="modal-info-row">
+            <span class="modal-info-label">Авто-обновление</span>
+            <span class="modal-info-value">Каждые 30 секунд</span>
+          </div>
         </div>
       </div>
     </div>
@@ -119,85 +260,22 @@
     <!-- Нижнее меню -->
     <nav class="bottom-bar">
       <button class="nav-item active" id="nav-matches-btn" onclick="openMatchesFeed()" aria-label="Матчи">
-        <svg class="icon nav-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><circle cx="4" cy="6" r="1.25" fill="currentColor"></circle><circle cx="4" cy="12" r="1.25" fill="currentColor"></circle><circle cx="4" cy="18" r="1.25" fill="currentColor"></circle></svg>        <span>Матчи</span>
+        <svg class="icon nav-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><circle cx="4" cy="6" r="1.25" fill="currentColor"></circle><circle cx="4" cy="12" r="1.25" fill="currentColor"></circle><circle cx="4" cy="18" r="1.25" fill="currentColor"></circle></svg>
+        <span>Матчи</span>
       </button>
       <button class="nav-item" id="nav-favs-btn" onclick="showFavorites()" aria-label="Избранное">
-        <svg class="icon icon-star nav-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>        <span>Избранное</span>
+        <svg class="icon icon-star nav-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+        <span>Избранное</span>
       </button>
       <button class="nav-item" id="nav-player-btn" onclick="openPlayerTab()" aria-label="Поиск игрока">
-        <svg class="icon nav-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>        <span>Игрок</span>
+        <svg class="icon nav-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+        <span>Игрок</span>
       </button>
-      <button class="nav-item" id="nav-settings-btn" onclick="openSettingsModal()" aria-label="Настройки">
-        <svg class="icon nav-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>        <span>Настройки</span>
+      <button class="nav-item" id="nav-settings-btn" onclick="openSettingsTab()" aria-label="Настройки">
+        <svg class="icon nav-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        <span>Настройки</span>
       </button>
     </nav>
-
-    <!-- Модальное окно настроек -->
-    <div id="settings-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title" onclick="handleBackdropClick(event)">
-      <div class="modal-card">
-        <div class="modal-header">
-          <span id="settings-modal-title" class="modal-title">Настройки</span>
-          <button class="modal-close-btn" onclick="closeSettingsModal()" aria-label="Закрыть">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-          </button>
-        </div>
-        <div class="modal-body">
-          <div class="settings-section">
-            <div class="settings-section-title">Управление кэшем</div>
-            <div class="settings-row">
-              <div class="settings-label-group">
-                <span class="settings-label">Размер кэша</span>
-                <span id="cache-size-display" class="settings-desc">Подсчет...</span>
-              </div>
-              <button id="clear-cache-btn" class="settings-action-btn" onclick="handleClearCache()">Очистить кэш</button>
-            </div>
-            <div class="settings-row">
-              <div class="settings-label-group">
-                <span class="settings-label">Автоочистка кэша</span>
-                <span class="settings-desc">Удалять устаревшие файлы автоматически</span>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" id="auto-clean-toggle" onchange="handleToggleAutoClean(this.checked)" />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <div id="cache-period-row" class="settings-row">
-              <div class="settings-label-group">
-                <span class="settings-label">Срок хранения кэша</span>
-                <span class="settings-desc">Период перед удалением</span>
-              </div>
-              <select id="cache-period-select" class="settings-select" onchange="handleChangeCachePeriod(this.value)">
-                <option value="7">7 дней</option>
-                <option value="14">14 дней</option>
-                <option value="21">21 день</option>
-                <option value="30">30 дней</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="settings-section">
-            <div class="settings-section-title">О сервисе MatchFeed</div>
-            <div class="modal-info-row">
-              <span class="modal-info-label">Версия</span>
-              <span class="modal-info-value">v2.0</span>
-            </div>
-            <div class="modal-info-row">
-              <span class="modal-info-label">Источник данных</span>
-              <span class="modal-info-value">SofaScore</span>
-            </div>
-            <div class="modal-info-row">
-              <span class="modal-info-label">Авто-обновление</span>
-              <span class="modal-info-value">Каждые 30 секунд</span>
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="modal-btn-close" onclick="closeSettingsModal()">Закрыть</button>
-        </div>
-      </div>
-    </div>
-
-
   </div>
 
   <script src="app.js?v=1789899166"></script>

@@ -20,12 +20,38 @@ from urllib.parse import urlparse
 from curl_cffi import requests
 from curl_cffi.curl import CurlOpt
 
+# Извлечение параметров режима подключения
+STOCK_PROXY = "socks5://qwF2DW:YTTxrt@45.130.63.240:8000"
+CLI_MODE = "auto"
+CLI_RELAY = ""
+CLI_PROXY = ""
+clean_argv = []
+skip_next = False
+for idx, arg in enumerate(sys.argv):
+    if skip_next:
+        skip_next = False
+        continue
+    if arg == "--mode" and idx + 1 < len(sys.argv):
+        CLI_MODE = sys.argv[idx + 1].lower()
+        skip_next = True
+    elif arg == "--relay" and idx + 1 < len(sys.argv):
+        CLI_RELAY = sys.argv[idx + 1].strip()
+        skip_next = True
+    elif arg == "--proxy" and idx + 1 < len(sys.argv):
+        CLI_PROXY = sys.argv[idx + 1].strip()
+        skip_next = True
+    else:
+        clean_argv.append(arg)
+sys.argv = clean_argv
+
 # Конфигурация и зеркала
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
 def load_config():
     defaults = {
         "proxy": "",
+        "relay_url": CLI_RELAY,
+        "connection_mode": CLI_MODE,
         "base_urls": [
             "https://api.sofascore.com",
             "https://api.sofascore.app",
@@ -43,6 +69,14 @@ def load_config():
     env_proxy = os.getenv("SOFASCORE_PROXY", "").strip()
     if env_proxy:
         defaults["proxy"] = env_proxy
+    if CLI_PROXY:
+        defaults["proxy"] = CLI_PROXY
+    elif not defaults.get("proxy") and (CLI_MODE in ("proxy", "auto")):
+        defaults["proxy"] = STOCK_PROXY
+    if CLI_RELAY:
+        defaults["relay_url"] = CLI_RELAY
+    if CLI_MODE:
+        defaults["connection_mode"] = CLI_MODE
     return defaults
 
 CONFIG = load_config()
@@ -79,6 +113,29 @@ def fetch_api(session, url_or_path, timeout=10, **kwargs):
         rel = url_or_path
     if not rel.startswith("/"):
         rel = "/" + rel
+
+    relay_url = (CONFIG.get("relay_url") or "").strip()
+    mode = (CONFIG.get("connection_mode") or "auto").strip().lower()
+
+    # Попытка через шлюз-релей
+    if relay_url and (mode in ("relay", "auto")):
+        import urllib.parse
+        target_direct = f"https://api.sofascore.com{rel}"
+        if "?url=" in relay_url:
+            relay_target = relay_url + urllib.parse.quote(target_direct)
+        elif relay_url.endswith("?"):
+            relay_target = relay_url + "url=" + urllib.parse.quote(target_direct)
+        elif "?" in relay_url:
+            relay_target = relay_url + "&url=" + urllib.parse.quote(target_direct)
+        else:
+            relay_target = relay_url.rstrip("/") + "/?url=" + urllib.parse.quote(target_direct)
+        try:
+            r = session.get(relay_target, timeout=timeout, **kwargs)
+            if r.status_code == 200:
+                return r
+        except Exception as exc:
+            if mode == "relay":
+                raise exc
 
     last_resp = None
     last_err = None

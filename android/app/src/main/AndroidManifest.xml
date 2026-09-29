@@ -36,10 +36,7 @@
 	<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
 	<!-- Permissions for Optional Features (Add/Remove as needed) -->
-	<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 	<uses-permission android:name="android.permission.CAMERA" />
-	<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-	<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
 	<!-- Permissions for File Access (Scoped Storage) -->
 	<uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
@@ -53,7 +50,6 @@
 		tools:ignore="ScopedStorage" />
 
 	<!-- Features (Optional) -->
-	<uses-feature android:name="android.hardware.location.gps" android:required="false" />
 	<uses-feature android:name="android.hardware.camera" android:required="false" />
 	<uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 

@@ -9,6 +9,7 @@ on:
       - Export-TEST-1
       - develop
       - main
+      - temp-diag
     paths:
       - 'android/**'
       - '.github/workflows/build-apk.yml'

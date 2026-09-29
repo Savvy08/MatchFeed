@@ -121,6 +121,11 @@ function saveCurrentNavState() {
       playerFilter: playerMatchesFilter,
       scrollY: window.scrollY
     };
+  } else if (currentView === 'settings') {
+    return {
+      view: 'settings',
+      scrollY: window.scrollY
+    };
   } else {
     return {
       view: 'feed',
@@ -154,6 +159,11 @@ function navigateBack() {
     return;
   }
 
+  if (currentView === 'settings') {
+    openMatchesFeed();
+    return;
+  }
+
   if (window.history.state && window.history.state.navIndex > 0) {
     window.history.back();
     return;
@@ -171,6 +181,10 @@ function restorePreviousNavigation() {
   }
 
   const prev = navStack.pop();
+  if (prev.view === 'settings') {
+    openSettingsTab();
+    return;
+  }
   isRestoringNavigation = true;
 
   try {
@@ -254,10 +268,20 @@ function showView(viewName) {
     document.getElementById('nav-player-btn')?.classList.add('active');
   } else if (viewName === 'match') {
     document.getElementById('nav-matches-btn')?.classList.add('active');
+  } else if (viewName === 'settings') {
+    document.getElementById('nav-settings-btn')?.classList.add('active');
   }
 
   // Scroll to top
   window.scrollTo({ top: 0, behavior: 'instant' });
+}
+
+function openSettingsTab() {
+  if (currentView !== 'settings') {
+    pushNavigation();
+  }
+  showView('settings');
+  initSettingsTab();
 }
 
 function openMatchesFeed() {
@@ -270,7 +294,11 @@ function openMatchesFeed() {
     p.classList.toggle('active', p.dataset.status === 'all');
   });
   showView('feed');
-  renderMatches();
+  if (!matches || matches.length === 0) {
+    fetchMatches();
+  } else {
+    renderMatches();
+  }
 }
 
 function showFavorites() {
@@ -388,28 +416,77 @@ function formatMatchTime(m) {
   return `<span>${escapeHtml(m.time || '--:--')}</span>`;
 }
 
+// Native bridge async callback registry
+const nativeBridgeCallbacks = {};
+window.onNativeApiResponse = function(requestId, responseData) {
+  if (nativeBridgeCallbacks[requestId]) {
+    try {
+      const parsed = typeof responseData === 'string' ? JSON.parse(responseData) : responseData;
+      nativeBridgeCallbacks[requestId](parsed);
+    } catch (e) {
+      nativeBridgeCallbacks[requestId]({ success: false, error: 'Ошибка разбора ответа' });
+    }
+    delete nativeBridgeCallbacks[requestId];
+  }
+};
+
 // Unified API client with fallback
 async function apiGet(params) {
   const isAndroidApp = window.navigator.userAgent.includes('MatchFeedApp') || (window.location.protocol === 'file:');
   const action = (params.action || 'live').toLowerCase();
 
-  // Instant response for cache actions in standalone app
-  if (isAndroidApp && (action === 'cache_info' || action === 'clear_cache' || action === 'clean_old_cache')) {
-    return { success: true, count: 0, bytes: 0, formattedSize: '0 КБ', deletedFiles: 0, freedBytes: 0, formattedFreed: '0 КБ' };
+  // Attach connection mode & proxy settings
+  const connSettings = getConnectionSettings();
+  if (!params.conn_mode) {
+    params.conn_mode = connSettings.mode || 'auto';
+  }
+  if (!params.relay_url && connSettings.relayUrl) {
+    params.relay_url = connSettings.relayUrl;
+  }
+  if (!params.relay2_url && connSettings.relay2Url) {
+    params.relay2_url = connSettings.relay2Url;
+  }
+  if (!params.custom_proxy && connSettings.customProxy) {
+    params.custom_proxy = connSettings.customProxy;
   }
 
-  // Native bridge direct call for Android app
-  if (isAndroidApp && window.JSBridge && typeof window.JSBridge.apiCall === 'function') {
-    try {
-      const resStr = window.JSBridge.apiCall(action, JSON.stringify(params));
-      if (resStr && resStr.length > 5) {
-        const parsed = JSON.parse(resStr);
-        if (parsed && parsed.success === true) {
-          return parsed;
+  // Native bridge asynchronous call for Android app (non-blocking)
+  if (isAndroidApp && window.JSBridge) {
+    if (typeof window.JSBridge.apiCallAsync === 'function') {
+      return new Promise((resolve) => {
+        const reqId = 'req_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now();
+        const timer = setTimeout(() => {
+          if (nativeBridgeCallbacks[reqId]) {
+            delete nativeBridgeCallbacks[reqId];
+            resolve({ success: false, error: 'Время ожидания ответа истекло' });
+          }
+        }, 25000);
+
+        nativeBridgeCallbacks[reqId] = (data) => {
+          clearTimeout(timer);
+          resolve(data);
+        };
+
+        try {
+          window.JSBridge.apiCallAsync(reqId, action, JSON.stringify(params));
+        } catch (e) {
+          clearTimeout(timer);
+          delete nativeBridgeCallbacks[reqId];
+          resolve({ success: false, error: e.message });
         }
+      });
+    } else if (typeof window.JSBridge.apiCall === 'function') {
+      try {
+        const resStr = window.JSBridge.apiCall(action, JSON.stringify(params));
+        if (resStr && resStr.length > 5) {
+          const parsed = JSON.parse(resStr);
+          if (parsed && parsed.success === true) {
+            return parsed;
+          }
+        }
+      } catch (bridgeErr) {
+        console.warn('Native JSBridge.apiCall error, trying fetch fallback:', bridgeErr);
       }
-    } catch (bridgeErr) {
-      console.warn('Native JSBridge.apiCall error, trying fetch fallback:', bridgeErr);
     }
   }
 
@@ -865,8 +942,8 @@ function renderMatches() {
     items.forEach(m => {
       const isFav = isFavoriteMatch(m.id);
       const isLive = m.status === 'live';
-      const homeScore = m.homeTeam.score !== null && m.homeTeam.score !== undefined ? m.homeTeam.score : '-';
-      const awayScore = m.awayTeam.score !== null && m.awayTeam.score !== undefined ? m.awayTeam.score : '-';
+      const homeScore = m.homeTeam?.score !== null && m.homeTeam?.score !== undefined ? m.homeTeam.score : '-';
+      const awayScore = m.awayTeam?.score !== null && m.awayTeam?.score !== undefined ? m.awayTeam.score : '-';
       const timeStr = formatMatchTime(m);
 
       const starIcon = isFav
@@ -881,11 +958,11 @@ function renderMatches() {
           </div>
           <div class="match-teams">
             <div class="team-line">
-              <span>${escapeHtml(m.homeTeam.name)}</span>
+              <span>${escapeHtml(m.homeTeam?.name || 'Команда 1')}</span>
               <span class="team-score">${homeScore}</span>
             </div>
             <div class="team-line">
-              <span>${escapeHtml(m.awayTeam.name)}</span>
+              <span>${escapeHtml(m.awayTeam?.name || 'Команда 2')}</span>
               <span class="team-score">${awayScore}</span>
             </div>
           </div>
@@ -1726,57 +1803,84 @@ function getMatchMediaHtml(data) {
 
 
 // Player profile & history view
+const playerSearchCache = new Map();
+let currentSearchQuery = '';
+
+function renderPlayerSearchResults(players, dropdown) {
+  if (!players || players.length === 0) {
+    dropdown.innerHTML = '<div style="padding: 12px; text-align: center; color: #9CA3AF; font-size: 13px;">Ничего не найдено</div>';
+    dropdown.classList.remove('hidden');
+    return;
+  }
+
+  let dHtml = '';
+  players.slice(0, 8).forEach(p => {
+    const isFoot = p.sport === 'football';
+    const sportBadge = isFoot
+      ? '<span class="sport-badge football">Футбол</span>'
+      : '<span class="sport-badge table-tennis">Н. теннис</span>';
+
+    dHtml += `
+      <button class="player-search-item" onclick="selectSearchedPlayer(${p.id}, '${escapeJs(p.name)}')">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <img src="api.php?action=image&id=${p.id}" class="search-avatar-img" alt="" onerror="this.style.opacity='0.2'">
+          <div>
+            <div class="search-item-name">${escapeHtml(p.name)}</div>
+            <div class="search-item-meta" style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+              ${sportBadge}
+              <span>${escapeHtml(p.country || '')}</span>
+            </div>
+          </div>
+        </div>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#9CA3AF" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+      </button>
+    `;
+  });
+
+  dropdown.innerHTML = dHtml;
+  dropdown.classList.remove('hidden');
+}
+
 function onPlayerSearchInput(val) {
   clearTimeout(playerSearchTimer);
   const q = val.trim();
   const dropdown = document.getElementById('player-search-results');
 
   if (q.length < 2) {
+    currentSearchQuery = '';
     if (dropdown) dropdown.classList.add('hidden');
     return;
   }
 
+  currentSearchQuery = q.toLowerCase();
+
+  // Instant response from memory cache (only if non-empty)
+  if (playerSearchCache.has(currentSearchQuery) && playerSearchCache.get(currentSearchQuery).length > 0) {
+    if (dropdown) renderPlayerSearchResults(playerSearchCache.get(currentSearchQuery), dropdown);
+    return;
+  }
+
   playerSearchTimer = setTimeout(async () => {
+    const activeQuery = currentSearchQuery;
     try {
       const data = await apiGet({ action: 'search', q: q });
-      if (!data || !data.success || !data.players || data.players.length === 0) {
-        if (dropdown) {
-          dropdown.innerHTML = '<div style="padding: 12px; text-align: center; color: #9CA3AF; font-size: 13px;">Ничего не найдено</div>';
-          dropdown.classList.remove('hidden');
-        }
-        return;
+      if (currentSearchQuery !== activeQuery) return; // Discard stale response
+
+      const players = (data && data.success && Array.isArray(data.players)) ? data.players : [];
+      if (players.length > 0) {
+        playerSearchCache.set(activeQuery, players);
       }
-
-      let dHtml = '';
-      data.players.slice(0, 8).forEach(p => {
-        const isFoot = p.sport === 'football';
-        const sportBadge = isFoot
-          ? '<span class="sport-badge football">Футбол</span>'
-          : '<span class="sport-badge table-tennis">Н. теннис</span>';
-
-        dHtml += `
-          <button class="player-search-item" onclick="selectSearchedPlayer(${p.id}, '${escapeJs(p.name)}')">
-            <div style="display:flex;align-items:center;gap:10px;">
-              <img src="api.php?action=image&id=${p.id}" class="search-avatar-img" alt="" onerror="this.style.opacity='0.2'">
-              <div>
-                <div class="search-item-name">${escapeHtml(p.name)}</div>
-                <div class="search-item-meta" style="display:flex;align-items:center;gap:6px;margin-top:2px;">
-                  ${sportBadge}
-                  <span>${escapeHtml(p.country || '')}</span>
-                </div>
-              </div>
-            </div>
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#9CA3AF" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-          </button>
-        `;
-      });
 
       if (dropdown) {
-        dropdown.innerHTML = dHtml;
+        renderPlayerSearchResults(players, dropdown);
+      }
+    } catch (e) {
+      if (dropdown && currentSearchQuery === activeQuery) {
+        dropdown.innerHTML = '<div style="padding: 12px; text-align: center; color: #9CA3AF; font-size: 13px;">Ничего не найдено</div>';
         dropdown.classList.remove('hidden');
       }
-    } catch (e) {}
-  }, 350);
+    }
+  }, 400);
 }
 
 function selectSearchedPlayer(id, name) {
@@ -1804,7 +1908,7 @@ async function openPlayerProfile(playerId, playerName) {
   if (content) content.innerHTML = '<div class="feed-loader">Загрузка профиля и статистики игрока...</div>';
 
   try {
-    const data = await apiGet({ action: 'player', id: playerId, page: 0 });
+    const data = await apiGet({ action: 'player', id: playerId, page: 0, name: playerName });
 
     if (!data || !data.success) {
       if (content) {
@@ -1820,9 +1924,14 @@ async function openPlayerProfile(playerId, playerName) {
     }
 
     const prof = data.profile || { name: playerName };
+    const validName = (prof.name && prof.name !== 'Игрок') ? prof.name : (playerName && playerName !== 'Игрок' ? playerName : (prof.name || 'Игрок'));
+    prof.name = validName;
+    if (!prof.fullName || prof.fullName === 'Игрок') {
+      prof.fullName = validName;
+    }
     currentPlayerProfile = {
       id: playerId,
-      name: prof.name || playerName,
+      name: validName,
       country: prof.country || '',
       ranking: prof.ranking || null,
       sport: prof.sport || currentSport
@@ -2455,10 +2564,128 @@ async function checkAutoCleanCache() {
   }
 }
 
-function openSettingsModal() {
-  const modal = document.getElementById('settings-modal') || document.getElementById('info-modal');
-  if (!modal) return;
+// Настройки подключения и управление кэшем
+function getConnectionSettings() {
+  const defaults = { mode: 'direct', relayUrl: '', relay2Url: '', customProxy: '' };
+  try {
+    const raw = localStorage.getItem('matchfeed_connection_settings');
+    const merged = raw ? Object.assign(defaults, JSON.parse(raw)) : defaults;
+    if (!merged.mode) merged.mode = 'direct';
+    return merged;
+  } catch (e) {
+    return defaults;
+  }
+}
 
+function saveConnectionSettings(settings) {
+  try {
+    localStorage.setItem('matchfeed_connection_settings', JSON.stringify(settings));
+  } catch (e) {}
+}
+
+function initSettingsTab() {
+  loadConnectionSettings();
+  loadCacheSettingsToUi();
+  loadCacheInfo();
+}
+
+function loadConnectionSettings() {
+  const settings = getConnectionSettings();
+  const radios = document.querySelectorAll('input[name="conn_mode"]');
+  radios.forEach(r => {
+    r.checked = (r.value === settings.mode);
+    const parent = r.closest('.mode-option');
+    if (parent) parent.classList.toggle('active', r.checked);
+  });
+
+  const proxyInput = document.getElementById('custom-proxy-input');
+  if (proxyInput) {
+    proxyInput.value = settings.customProxy || '';
+  }
+}
+
+function handleConnectionModeChange(mode) {
+  const settings = getConnectionSettings();
+  settings.mode = mode;
+  saveConnectionSettings(settings);
+
+  document.querySelectorAll('.mode-option').forEach(opt => {
+    const r = opt.querySelector('input[type="radio"]');
+    opt.classList.toggle('active', r && r.value === mode);
+  });
+
+  playerSearchCache.clear();
+  fetchMatches();
+
+  const statusMsg = document.getElementById('connection-status-msg');
+  if (statusMsg) {
+    statusMsg.textContent = 'Режим сохранен';
+    statusMsg.className = 'connection-status-text ok';
+    setTimeout(() => { if (statusMsg.textContent === 'Режим сохранен') statusMsg.textContent = ''; }, 2000);
+  }
+}
+
+function handleCustomProxyChange(val) {
+  const settings = getConnectionSettings();
+  settings.customProxy = (val || '').trim();
+  saveConnectionSettings(settings);
+
+  const statusMsg = document.getElementById('connection-status-msg');
+  if (statusMsg) {
+    statusMsg.textContent = 'Прокси сохранен';
+    statusMsg.className = 'connection-status-text ok';
+    setTimeout(() => { if (statusMsg.textContent === 'Прокси сохранен') statusMsg.textContent = ''; }, 2000);
+  }
+}
+
+function resetDefaultProxy() {
+  const proxyInput = document.getElementById('custom-proxy-input');
+  if (proxyInput) proxyInput.value = '';
+  handleCustomProxyChange('');
+}
+
+async function testConnection() {
+  const btn = document.getElementById('test-connection-btn');
+  const statusMsg = document.getElementById('connection-status-msg');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Проверка...';
+  }
+  if (statusMsg) {
+    statusMsg.textContent = 'Тестирование...';
+    statusMsg.className = 'connection-status-text';
+  }
+
+  const startTime = performance.now();
+  try {
+    const res = await apiGet({ action: 'live', sport: 'table-tennis', _test: 1 });
+    const duration = Math.round(performance.now() - startTime);
+    if (res && res.success && Array.isArray(res.matches)) {
+      if (statusMsg) {
+        statusMsg.textContent = `Успешно: получено ${res.matches.length} матчей (${duration} мс)`;
+        statusMsg.className = 'connection-status-text ok';
+      }
+    } else {
+      const err = res && res.error ? res.error : 'Нет данных';
+      if (statusMsg) {
+        statusMsg.textContent = `Ошибка: ${err}`;
+        statusMsg.className = 'connection-status-text fail';
+      }
+    }
+  } catch (e) {
+    if (statusMsg) {
+      statusMsg.textContent = `Сбой: ${e.message || 'Ошибка сети'}`;
+      statusMsg.className = 'connection-status-text fail';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Проверить соединение';
+    }
+  }
+}
+
+function loadCacheSettingsToUi() {
   const settings = getCacheSettings();
   const toggle = document.getElementById('auto-clean-toggle');
   const select = document.getElementById('cache-period-select');
@@ -2467,38 +2694,27 @@ function openSettingsModal() {
   if (toggle) toggle.checked = !!settings.autoClean;
   if (select) select.value = String(settings.cacheDays || 7);
   if (periodRow) periodRow.style.display = settings.autoClean ? 'flex' : 'none';
+}
 
-  modal.classList.add('open');
-  document.body.style.overflow = 'hidden';
-  try {
-    window.history.pushState({ modal: 'settings' }, '');
-  } catch (e) {}
-  loadCacheInfo();
+function openSettingsModal() {
+  openSettingsTab();
 }
 
 function closeSettingsModal(isFromPopstate = false) {
-  const modal = document.getElementById('settings-modal') || document.getElementById('info-modal');
-  if (!modal) return;
-  modal.classList.remove('open');
-  document.body.style.overflow = '';
-  if (!isFromPopstate && window.history.state && window.history.state.modal === 'settings') {
-    try {
-      window.history.back();
-    } catch (e) {}
-  }
+  navigateBack();
 }
 
 function openInfoModal() {
-  openSettingsModal();
+  openSettingsTab();
 }
 
 function closeInfoModal() {
-  closeSettingsModal();
+  navigateBack();
 }
 
 function handleBackdropClick(event) {
   if (event.target === event.currentTarget) {
-    closeSettingsModal();
+    navigateBack();
   }
 }
 
