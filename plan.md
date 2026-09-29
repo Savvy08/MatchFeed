@@ -17,6 +17,24 @@
 1. ~~Исправить эндпоинт поиска на /api/v1/search/{query} и структуру парсера в SofaScoreClient.java.~~
 2. ~~Собрать обновленный Android APK (app-debug.apk).~~
 3. ~~Создать ветку Fix-connect-android и опубликовать в origin.~~
-4. Предоставить инструкцию по выбору ветки Fix-connect-android и настройке сервиса в Render.
-5. Объяснить причину ошибки 404 на Netlify.
+4. ~~Предоставить инструкцию по выбору ветки Fix-connect-android и настройке сервиса в Render.~~
+5. ~~Объяснить причину ошибки 404 на Netlify.~~
+6. ~~Убрать системные разрешения геолокации и уведомлений в AndroidManifest.xml, MainActivity.java и swv.properties.~~
+7. ~~Восстановить стабильность прокси и режима Авто в SofaScoreClient.java: скорректировать таймауты до 7-8 секунд для SOCKS/HTTP, улучшить обработку SOCKS5-аутентификации.~~
+8. ~~Добавить в интерфейс настроек наглядную подсказку по форматам ввода собственного прокси и убрать временную кнопку Netlify.~~
+9. ~~Подключить рабочий Render URL https://matchfeed.onrender.com в SofaScoreClient.java, config.json и app.js.~~
+10. ~~Скомпилировать обновленный Android APK (app-debug.apk) и подготовить для тестирования на эмуляторе.~~
+11. Восстановление и автономный деплой Netlify (отложено пользователем до будущих обновлений).
+12. ~~Отфильтровать судей и клубы в методе parseSearchJson в SofaScoreClient.java.~~
+13. ~~Защитить обращение к свойствам homeTeam и awayTeam в renderMatches в app.js и assets/app.js.~~
+14. ~~Собрать чистый app-debug.apk и подготовить для тестирования на физическом устройстве.~~
+15. Привязка прокси по IP: 45.130.63.240:8000 (HTTPS/SOCKS5, логин qwF2DW, пароль YTTxrt) - зафиксировано для будущей оптимизации, в коде пока не применять.
+16. ~~Добавить каскад зеркал (api.sofascore.com, api.sofascore.app, mobile.sofascore.com, www.sofascore.com) и оптимизировать handleMatchAction в SofaScoreClient.java.~~
+17. ~~Исправить определение страны (category.country), сохранение имени игрока и каскад зеркал для истории в handlePlayerAction в SofaScoreClient.java.~~
+18. ~~Увеличить таймаут моста JSBridge до 25 секунд и предотвратить затирание имени игрока заглушкой "Игрок" в app.js и assets/app.js.~~
+19. ~~Скомпилировать обновленный app-debug.apk через Gradle без git push и подготовить для тестирования.~~
+20. ~~Исключить app-debug.apk из отслеживания git и добавить в .gitignore без включения файла хронологии.~~
+21. Запушить проверенные изменения в ветку Fix-connect-android.
+22. Сформировать PreRelease v2.1 на GitHub с прикреплением app-debug.apk и понятным описанием изменений.
+
 

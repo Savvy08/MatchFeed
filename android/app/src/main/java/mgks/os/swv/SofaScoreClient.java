@@ -45,11 +45,11 @@ public class SofaScoreClient {
     private static CronetEngine cronetEngine;
     private static Context appContext;
     private static File cacheDir;
-    private static String currentConnectionMode = "auto";
-    private static String configuredRelayUrl = "";
+    private static String currentConnectionMode = "direct";
+    private static String configuredRelayUrl = "https://matchfeed.onrender.com";
     private static String configuredRelay2Url = "";
     private static String customProxyUrl = "";
-    private static final String STOCK_PROXY = "socks5://qwF2DW:YTTxrt@45.130.63.240:8000";
+    private static final String STOCK_PROXY = "";
 
     // Reliable fallback proxy endpoints for sports data
     private static final String[] PROXY_SERVERS = new String[] {
@@ -365,7 +365,7 @@ public class SofaScoreClient {
                     return handleMatchAction(params.get("id"));
                 case "player":
                 case "history":
-                    return handlePlayerAction(params.get("id"), params.getOrDefault("page", "0"));
+                    return handlePlayerAction(params.get("id"), params.getOrDefault("page", "0"), params.get("name"));
                 case "search":
                     return handleSearchAction(params.get("q"));
                 case "cache_info":
@@ -407,7 +407,7 @@ public class SofaScoreClient {
                 case "search":
                     return parseSearchJson(rawJson);
                 case "player":
-                    return handlePlayerAction(null, "0");
+                    return handlePlayerAction(null, "0", null);
                 default:
                     return "{\"success\":false,\"error\":\"Неизвестное действие: " + action + "\"}";
             }
@@ -438,7 +438,7 @@ public class SofaScoreClient {
                     return jsonResponse(handleMatchAction(getParam(uri, "id")));
                 case "player":
                 case "history":
-                    return jsonResponse(handlePlayerAction(getParam(uri, "id"), getParam(uri, "page")));
+                    return jsonResponse(handlePlayerAction(getParam(uri, "id"), getParam(uri, "page"), getParam(uri, "name")));
                 case "search":
                     return jsonResponse(handleSearchAction(getParam(uri, "q")));
                 case "image":
@@ -581,6 +581,10 @@ public class SofaScoreClient {
 
     // Action player
     public static String handlePlayerAction(String playerId, String pageStr) {
+        return handlePlayerAction(playerId, pageStr, null);
+    }
+
+    public static String handlePlayerAction(String playerId, String pageStr, String clientPlayerName) {
         if (playerId == null || playerId.trim().isEmpty()) {
             return "{\"success\":false,\"error\":\"ID игрока не указан\"}";
         }
@@ -590,20 +594,30 @@ public class SofaScoreClient {
         try {
             // 1. Profile bio
             JSONObject profile = new JSONObject();
-            String profUrl = "https://api.sofascore.com/api/v1/team/" + playerId;
-            String profJson = fetchString(profUrl);
+            String profJson = fetchWithMirrors("/api/v1/team/" + playerId);
             if (profJson != null) {
                 try {
                     JSONObject pRoot = new JSONObject(profJson);
                     JSONObject t = pRoot.optJSONObject("team");
                     if (t != null) {
                         JSONObject countryObj = t.optJSONObject("country");
+                        JSONObject catObj = t.optJSONObject("category");
+                        JSONObject catCountry = catObj != null ? catObj.optJSONObject("country") : null;
                         JSONObject sportObj = t.optJSONObject("sport");
                         profile.put("id", t.opt("id"));
                         profile.put("name", ruName(t, "name"));
                         profile.put("originalName", t.optString("name", ""));
                         profile.put("fullName", t.optString("fullName", t.optString("name", "")));
-                        profile.put("country", ruName(countryObj, "name"));
+
+                        String cName = "";
+                        if (countryObj != null && countryObj.has("name")) {
+                            cName = ruName(countryObj, "name");
+                        } else if (catCountry != null && catCountry.has("name")) {
+                            cName = ruName(catCountry, "name");
+                        } else if (catObj != null && catObj.has("name")) {
+                            cName = ruName(catObj, "name");
+                        }
+                        profile.put("country", cName);
                         profile.put("ranking", t.opt("ranking"));
                         String rawGender = t.optString("gender", "");
                         profile.put("gender", rawGender);
@@ -615,10 +629,19 @@ public class SofaScoreClient {
                 }
             }
 
+            // Fallback for name if bio didn't provide it
+            if (!profile.has("name") || profile.optString("name").trim().isEmpty()) {
+                if (clientPlayerName != null && !clientPlayerName.trim().isEmpty() && !"Игрок".equals(clientPlayerName.trim())) {
+                    profile.put("name", clientPlayerName.trim());
+                    profile.put("fullName", clientPlayerName.trim());
+                } else {
+                    profile.put("name", "Игрок");
+                }
+            }
+
             // 2. Upcoming matches
             JSONArray nextMatches = new JSONArray();
-            String nextUrl = "https://api.sofascore.com/api/v1/team/" + playerId + "/events/next/0";
-            String nextJson = fetchString(nextUrl);
+            String nextJson = fetchWithMirrors("/api/v1/team/" + playerId + "/events/next/0");
             if (nextJson != null) {
                 try {
                     JSONObject nRoot = new JSONObject(nextJson);
@@ -664,8 +687,7 @@ public class SofaScoreClient {
             }
 
             // 3. History
-            String histUrl = "https://api.sofascore.com/api/v1/team/" + playerId + "/events/last/" + page;
-            String histJson = fetchString(histUrl);
+            String histJson = fetchWithMirrors("/api/v1/team/" + playerId + "/events/last/" + page);
             List<JSONObject> matchesList = new ArrayList<>();
             Map<String, Integer> tournCounts = new HashMap<>();
 
@@ -766,8 +788,12 @@ public class SofaScoreClient {
                 }
             }
             profile.put("currentLeague", mainLeague);
-            if (!profile.has("name") || profile.optString("name").isEmpty()) {
-                profile.put("name", "Игрок");
+            if (!profile.has("name") || profile.optString("name").trim().isEmpty()) {
+                if (clientPlayerName != null && !clientPlayerName.trim().isEmpty() && !"Игрок".equals(clientPlayerName.trim())) {
+                    profile.put("name", clientPlayerName.trim());
+                } else {
+                    profile.put("name", "Игрок");
+                }
             }
 
             // Calculations
@@ -927,12 +953,7 @@ public class SofaScoreClient {
         }
 
         try {
-            String url = "https://api.sofascore.com/api/v1/event/" + eventId;
-            String rawJson = fetchString(url);
-            if (rawJson == null) {
-                url = "https://api.sofascore.app/api/v1/event/" + eventId;
-                rawJson = fetchString(url);
-            }
+            String rawJson = fetchWithMirrors("/api/v1/event/" + eventId);
             if (rawJson == null || rawJson.trim().isEmpty()) {
                 return "{\"success\":false,\"error\":\"Не удалось загрузить данные о матче\"}";
             }
@@ -976,6 +997,7 @@ public class SofaScoreClient {
             JSONObject cat = tourn != null ? tourn.optJSONObject("category") : null;
             JSONObject sportData = cat != null ? cat.optJSONObject("sport") : (tourn != null ? tourn.optJSONObject("sport") : null);
             String sportSlug = sportData != null ? sportData.optString("slug", "table-tennis") : "table-tennis";
+            boolean isTableTennis = "table-tennis".equalsIgnoreCase(sportSlug);
             JSONObject roundInfo = ev.optJSONObject("roundInfo");
             JSONObject homeTeam = ev.optJSONObject("homeTeam");
             JSONObject awayTeam = ev.optJSONObject("awayTeam");
@@ -995,7 +1017,7 @@ public class SofaScoreClient {
             votes.put("voteX", 0);
             votes.put("hasDraw", false);
             try {
-                String vrJson = fetchString("https://api.sofascore.com/api/v1/event/" + eventId + "/votes");
+                String vrJson = fetchWithMirrors("/api/v1/event/" + eventId + "/votes");
                 if (vrJson != null) {
                     JSONObject vrRoot = new JSONObject(vrJson);
                     JSONObject vRaw = vrRoot.optJSONObject("vote");
@@ -1019,7 +1041,7 @@ public class SofaScoreClient {
             h2hDuel.put("awayWins", 0);
             h2hDuel.put("draws", 0);
             try {
-                String hrJson = fetchString("https://api.sofascore.com/api/v1/event/" + eventId + "/h2h");
+                String hrJson = fetchWithMirrors("/api/v1/event/" + eventId + "/h2h");
                 if (hrJson != null) {
                     JSONObject hrRoot = new JSONObject(hrJson);
                     JSONObject td = hrRoot.optJSONObject("teamDuel");
@@ -1038,7 +1060,7 @@ public class SofaScoreClient {
 
             if (hid != null) {
                 try {
-                    String hhrJson = fetchString("https://api.sofascore.com/api/v1/team/" + hid + "/events/last/0");
+                    String hhrJson = fetchWithMirrors("/api/v1/team/" + hid + "/events/last/0");
                     if (hhrJson != null) {
                         parseTeamFormEvents(new JSONObject(hhrJson).optJSONArray("events"), String.valueOf(hid), aid != null ? String.valueOf(aid) : null, eventId, homeFormList, directMatches);
                     }
@@ -1047,7 +1069,7 @@ public class SofaScoreClient {
 
             if (aid != null) {
                 try {
-                    String ahrJson = fetchString("https://api.sofascore.com/api/v1/team/" + aid + "/events/last/0");
+                    String ahrJson = fetchWithMirrors("/api/v1/team/" + aid + "/events/last/0");
                     if (ahrJson != null) {
                         parseTeamFormEvents(new JSONObject(ahrJson).optJSONArray("events"), String.valueOf(aid), hid != null ? String.valueOf(hid) : null, eventId, awayFormList, null);
                     }
@@ -1072,8 +1094,7 @@ public class SofaScoreClient {
 
             if (utid != null && sid != null) {
                 try {
-                    String ctreeUrl = "https://api.sofascore.com/api/v1/unique-tournament/" + utid + "/season/" + sid + "/cuptrees";
-                    String ctrJson = fetchString(ctreeUrl);
+                    String ctrJson = fetchWithMirrors("/api/v1/unique-tournament/" + utid + "/season/" + sid + "/cuptrees");
                     if (ctrJson != null) {
                         JSONObject ctrRoot = new JSONObject(ctrJson);
                         JSONArray trees = ctrRoot.optJSONArray("cupTrees");
@@ -1221,7 +1242,7 @@ public class SofaScoreClient {
             JSONArray tournMatches = new JSONArray();
             if (treeRounds.length() == 0 && tid != null) {
                 try {
-                    String tmJson = fetchString("https://api.sofascore.com/api/v1/tournament/" + tid + "/events/last/0");
+                    String tmJson = fetchWithMirrors("/api/v1/tournament/" + tid + "/events/last/0");
                     if (tmJson != null) {
                         JSONArray tmEvents = new JSONObject(tmJson).optJSONArray("events");
                         if (tmEvents != null) {
@@ -1266,50 +1287,33 @@ public class SofaScoreClient {
             Set<String> seenVideos = new HashSet<>();
             try {
                 JSONArray rawMedia = new JSONArray();
-                String[] mediaUrls = new String[] {
-                    "https://api.sofascore.com/api/v1/event/" + eventId + "/media",
-                    "https://api.sofascore.app/api/v1/event/" + eventId + "/media"
-                };
-                for (String mUrl : mediaUrls) {
-                    String medJson = fetchString(mUrl);
-                    if (medJson != null) {
-                        JSONArray mArr = new JSONObject(medJson).optJSONArray("media");
-                        if (mArr != null && mArr.length() > 0) {
-                            rawMedia = mArr;
-                            break;
-                        }
+                String medJson = fetchWithMirrors("/api/v1/event/" + eventId + "/media");
+                if (medJson != null) {
+                    JSONArray mArr = new JSONObject(medJson).optJSONArray("media");
+                    if (mArr != null && mArr.length() > 0) {
+                        rawMedia = mArr;
                     }
                 }
 
                 // Fallback to highlights
                 if (rawMedia.length() == 0) {
-                    String[] hlUrls = new String[] {
-                        "https://api.sofascore.com/api/v1/event/" + eventId + "/highlights",
-                        "https://api.sofascore.app/api/v1/event/" + eventId + "/highlights"
-                    };
-                    for (String hlUrl : hlUrls) {
-                        String hlJson = fetchString(hlUrl);
-                        if (hlJson != null) {
-                            JSONObject hlObj = new JSONObject(hlJson);
-                            JSONArray hlArr = hlObj.optJSONArray("highlights");
-                            if (hlArr == null) hlArr = hlObj.optJSONArray("media");
-                            if (hlArr != null && hlArr.length() > 0) {
-                                rawMedia = hlArr;
-                                break;
-                            }
+                    String hlJson = fetchWithMirrors("/api/v1/event/" + eventId + "/highlights");
+                    if (hlJson != null) {
+                        JSONObject hlObj = new JSONObject(hlJson);
+                        JSONArray hlArr = hlObj.optJSONArray("highlights");
+                        if (hlArr == null) hlArr = hlObj.optJSONArray("media");
+                        if (hlArr != null && hlArr.length() > 0) {
+                            rawMedia = hlArr;
                         }
                     }
                 }
 
-                // Fallback to team media with opponent filter
-                if (rawMedia.length() == 0 && (hid != null || aid != null)) {
+                // Fallback to team media with opponent filter (skip for table tennis)
+                if (!isTableTennis && rawMedia.length() == 0 && (hid != null || aid != null)) {
                     Object[] tIds = new Object[] { hid, aid };
                     for (Object tIdObj : tIds) {
                         if (tIdObj == null) continue;
-                        String tMediaJson = fetchString("https://api.sofascore.com/api/v1/team/" + tIdObj + "/media");
-                        if (tMediaJson == null) {
-                            tMediaJson = fetchString("https://api.sofascore.app/api/v1/team/" + tIdObj + "/media");
-                        }
+                        String tMediaJson = fetchWithMirrors("/api/v1/team/" + tIdObj + "/media");
                         if (tMediaJson != null) {
                             JSONArray tMediaArr = new JSONObject(tMediaJson).optJSONArray("media");
                             if (tMediaArr != null) {
@@ -1365,10 +1369,7 @@ public class SofaScoreClient {
 
             JSONArray newsList = new JSONArray();
             try {
-                String newsJson = fetchString("https://api.sofascore.com/api/v1/event/" + eventId + "/media/news");
-                if (newsJson == null) {
-                    newsJson = fetchString("https://api.sofascore.app/api/v1/event/" + eventId + "/media/news");
-                }
+                String newsJson = fetchWithMirrors("/api/v1/event/" + eventId + "/media/news");
                 JSONArray nArr = null;
                 if (newsJson != null) {
                     JSONObject newsObj = new JSONObject(newsJson);
@@ -1376,14 +1377,11 @@ public class SofaScoreClient {
                     if (nArr == null) nArr = newsObj.optJSONArray("news");
                 }
 
-                if ((nArr == null || nArr.length() == 0) && (hid != null || aid != null)) {
+                if (!isTableTennis && (nArr == null || nArr.length() == 0) && (hid != null || aid != null)) {
                     Object[] tIds = new Object[] { hid, aid };
                     for (Object tIdObj : tIds) {
                         if (tIdObj == null) continue;
-                        String tNewsJson = fetchString("https://api.sofascore.com/api/v1/team/" + tIdObj + "/media/news");
-                        if (tNewsJson == null) {
-                            tNewsJson = fetchString("https://api.sofascore.app/api/v1/team/" + tIdObj + "/media/news");
-                        }
+                        String tNewsJson = fetchWithMirrors("/api/v1/team/" + tIdObj + "/media/news");
                         if (tNewsJson != null) {
                             JSONObject tNewsObj = new JSONObject(tNewsJson);
                             JSONArray tArr = tNewsObj.optJSONArray("newsArticles");
@@ -1425,9 +1423,17 @@ public class SofaScoreClient {
             result.put("id", ev.optString("id", eventId));
             result.put("sport", sportSlug);
             result.put("date", dtStr);
+            boolean isLive = false;
+            if (statusObj != null) {
+                String sType = statusObj.optString("type", "");
+                String sDesc = statusObj.optString("description", "").toLowerCase(Locale.US);
+                if ("inprogress".equalsIgnoreCase(sType) || sDesc.contains("set") || sDesc.contains("live") || sDesc.contains("progress")) {
+                    isLive = true;
+                }
+            }
             result.put("startTimestamp", ts);
             result.put("status", statusLabel);
-            result.put("isLive", statusObj != null && "inprogress".equalsIgnoreCase(statusObj.optString("type")));
+            result.put("isLive", isLive);
             result.put("tournament", tournClean.isEmpty() ? "Турнир" : tournClean);
             result.put("category", ruName(cat, "name"));
             result.put("round", roundInfo != null ? roundInfo.optString("name", "") : "");
@@ -1498,65 +1504,68 @@ public class SofaScoreClient {
 
     private static JSONArray fetchOddsList(String eventId) {
         JSONArray oddsList = new JSONArray();
-        String[] urls = new String[] {
-            "https://api.sofascore.com/api/v1/event/" + eventId + "/odds/featured",
-            "https://api.sofascore.app/api/v1/event/" + eventId + "/odds/featured",
-            "https://api.sofascore.com/api/v1/event/" + eventId + "/odds/1/all",
-            "https://api.sofascore.app/api/v1/event/" + eventId + "/odds/1/all",
-            "https://api.sofascore.com/api/v1/event/" + eventId + "/odds/2/all",
-            "https://api.sofascore.app/api/v1/event/" + eventId + "/odds/2/all"
-        };
+        String featuredJson = fetchWithMirrors("/api/v1/event/" + eventId + "/odds/featured");
+        if (featuredJson != null) {
+            parseOddsJson(featuredJson, oddsList);
+        }
+        if (oddsList.length() == 0) {
+            String odds1Json = fetchWithMirrors("/api/v1/event/" + eventId + "/odds/1/all");
+            if (odds1Json != null) {
+                parseOddsJson(odds1Json, oddsList);
+            }
+        }
+        if (oddsList.length() == 0) {
+            String odds2Json = fetchWithMirrors("/api/v1/event/" + eventId + "/odds/2/all");
+            if (odds2Json != null) {
+                parseOddsJson(odds2Json, oddsList);
+            }
+        }
+        return oddsList;
+    }
 
-        for (String url : urls) {
-            try {
-                String jsonStr = fetchString(url);
-                if (jsonStr == null || jsonStr.trim().isEmpty()) continue;
-                JSONObject root = new JSONObject(jsonStr);
+    private static void parseOddsJson(String jsonStr, JSONArray oddsList) {
+        if (jsonStr == null || jsonStr.trim().isEmpty()) return;
+        try {
+            JSONObject root = new JSONObject(jsonStr);
 
-                // 1. Standard markets array
-                JSONArray markets = root.optJSONArray("markets");
-                if (markets != null && markets.length() > 0) {
-                    for (int mIdx = 0; mIdx < markets.length(); mIdx++) {
-                        JSONObject mObj = markets.optJSONObject(mIdx);
+            // 1. Standard markets array
+            JSONArray markets = root.optJSONArray("markets");
+            if (markets != null && markets.length() > 0) {
+                for (int mIdx = 0; mIdx < markets.length(); mIdx++) {
+                    JSONObject mObj = markets.optJSONObject(mIdx);
+                    if (mObj == null) continue;
+                    JSONArray choicesArr = mObj.optJSONArray("choices");
+                    JSONArray choices = parseChoices(choicesArr);
+                    if (choices.length() > 0) {
+                        JSONObject market = new JSONObject();
+                        market.put("market", mObj.optString("marketName", "Full time"));
+                        market.put("choices", choices);
+                        oddsList.put(market);
+                    }
+                }
+            }
+
+            // 2. Featured object (/odds/featured)
+            if (oddsList.length() == 0) {
+                JSONObject featured = root.optJSONObject("featured");
+                if (featured != null) {
+                    Iterator<String> keys = featured.keys();
+                    while (keys.hasNext()) {
+                        String key = keys.next();
+                        JSONObject mObj = featured.optJSONObject(key);
                         if (mObj == null) continue;
                         JSONArray choicesArr = mObj.optJSONArray("choices");
                         JSONArray choices = parseChoices(choicesArr);
                         if (choices.length() > 0) {
                             JSONObject market = new JSONObject();
-                            market.put("market", mObj.optString("marketName", "Full time"));
+                            market.put("market", mObj.optString("marketName", key));
                             market.put("choices", choices);
                             oddsList.put(market);
                         }
                     }
                 }
-
-                // 2. Featured object (/odds/featured)
-                if (oddsList.length() == 0) {
-                    JSONObject featured = root.optJSONObject("featured");
-                    if (featured != null) {
-                        Iterator<String> keys = featured.keys();
-                        while (keys.hasNext()) {
-                            String key = keys.next();
-                            JSONObject mObj = featured.optJSONObject(key);
-                            if (mObj == null) continue;
-                            JSONArray choicesArr = mObj.optJSONArray("choices");
-                            JSONArray choices = parseChoices(choicesArr);
-                            if (choices.length() > 0) {
-                                JSONObject market = new JSONObject();
-                                market.put("market", mObj.optString("marketName", key));
-                                market.put("choices", choices);
-                                oddsList.put(market);
-                            }
-                        }
-                    }
-                }
-
-                if (oddsList.length() > 0) {
-                    break;
-                }
-            } catch (Exception ignored) {}
-        }
-        return oddsList;
+            }
+        } catch (Exception ignored) {}
     }
 
     private static JSONArray parseChoices(JSONArray choicesArr) {
@@ -1725,10 +1734,15 @@ public class SofaScoreClient {
     public static String handleSearchAction(String q) {
         if (q == null || q.trim().isEmpty()) return "{\"success\":true,\"players\":[]}";
         try {
-            String url = "https://api.sofascore.com/api/v1/search/" + URLEncoder.encode(q, "UTF-8");
+            String encoded = URLEncoder.encode(q.trim(), "UTF-8").replace("+", "%20");
+            String url = "https://api.sofascore.com/api/v1/search/" + encoded;
             String rawJson = fetchString(url);
             if (rawJson == null) {
-                url = "https://api.sofascore.app/api/v1/search/" + URLEncoder.encode(q, "UTF-8");
+                url = "https://api.sofascore.app/api/v1/search/" + encoded;
+                rawJson = fetchString(url);
+            }
+            if (rawJson == null) {
+                url = "https://mobile.sofascore.com/api/v1/search/" + encoded;
                 rawJson = fetchString(url);
             }
             return parseSearchJson(rawJson);
@@ -1751,12 +1765,21 @@ public class SofaScoreClient {
                 for (int i = 0; i < results.length(); i++) {
                     JSONObject r = results.optJSONObject(i);
                     if (r == null) continue;
+                    String type = r.optString("type", "");
+                    if ("referee".equalsIgnoreCase(type) || "manager".equalsIgnoreCase(type)) {
+                        continue;
+                    }
                     JSONObject entity = r.optJSONObject("entity");
                     if (entity == null) continue;
 
                     JSONObject sportObj = entity.optJSONObject("sport");
                     String sportSlug = sportObj != null ? sportObj.optString("slug", "") : "";
                     if (!sportSlug.isEmpty() && !sportSlug.equals("table-tennis") && !sportSlug.equals("tennis") && !sportSlug.equals("football")) {
+                        continue;
+                    }
+
+                    // Filter out pure football clubs without player info
+                    if ("football".equals(sportSlug) && "team".equalsIgnoreCase(type) && !entity.has("playerTeamInfo") && !entity.has("gender")) {
                         continue;
                     }
 
@@ -1865,6 +1888,32 @@ public class SofaScoreClient {
         return svgFallbackResponse();
     }
 
+    // Fetch with mirror rotation
+    public static String fetchWithMirrors(String urlOrPath) {
+        if (urlOrPath == null || urlOrPath.trim().isEmpty()) return null;
+        String path = urlOrPath;
+        if (path.startsWith("http://") || path.startsWith("https://")) {
+            try {
+                URL u = new URL(path);
+                path = u.getFile();
+            } catch (Exception ignored) {}
+        }
+        String cleanPath = path.startsWith("/") ? path : ("/" + path);
+        String[] hosts = new String[] {
+            "https://api.sofascore.com",
+            "https://api.sofascore.app",
+            "https://mobile.sofascore.com",
+            "https://www.sofascore.com"
+        };
+        for (String host : hosts) {
+            String res = fetchString(host + cleanPath);
+            if (res != null && !res.trim().isEmpty()) {
+                return res;
+            }
+        }
+        return null;
+    }
+
     // Network helper with cache and connection mode routing
     public static String fetchString(String urlStr) {
         long ttlSeconds = 7200; // default 2 hours cache for details/profiles
@@ -1874,22 +1923,24 @@ public class SofaScoreClient {
             ttlSeconds = 3600; // 1 hour for search
         }
 
-        // 1. Check cache first
+        // 1. Check cache first (do not use corrupted or empty player responses)
         String cached = getDiskCache(urlStr, ttlSeconds);
-        if (cached != null && !cached.isEmpty()) {
+        if (cached != null && !cached.isEmpty() && !cached.contains("\"players\":[]") && !cached.contains("\"success\":false") && !cached.contains("\"error\":")) {
             return cached;
         }
 
         // 2. Fetch from network
         String result = fetchStringNetworkOnly(urlStr);
         if (result != null && !result.isEmpty()) {
-            putDiskCache(urlStr, result);
+            if (!result.contains("\"players\":[]") && !result.contains("\"success\":false") && !result.contains("\"error\":")) {
+                putDiskCache(urlStr, result);
+            }
             return result;
         }
 
         // 3. Fallback to stale cache if network failed
         String stale = getDiskCache(urlStr, -1);
-        if (stale != null && !stale.isEmpty()) {
+        if (stale != null && !stale.isEmpty() && !stale.contains("\"players\":[]") && !stale.contains("\"success\":false")) {
             Log.d(TAG, "Using stale cache for " + urlStr);
             return stale;
         }
@@ -1899,7 +1950,7 @@ public class SofaScoreClient {
 
     public static String fetchStringNetworkOnly(String urlStr) {
         String mode = currentConnectionMode;
-        if (mode == null || mode.isEmpty()) mode = "auto";
+        if (mode == null || mode.isEmpty()) mode = "direct";
 
         if ("proxy".equalsIgnoreCase(mode)) {
             return fetchViaProxy(urlStr);
@@ -1910,19 +1961,15 @@ public class SofaScoreClient {
         } else if ("direct".equalsIgnoreCase(mode)) {
             return fetchDirect(urlStr);
         } else {
-            // Auto mode: try proxy -> relay1 -> relay2 -> direct
-            String res = fetchViaProxy(urlStr);
+            // Auto mode: try direct (Cronet HTTP/2) -> relay1 (Render) -> proxy
+            String res = fetchDirect(urlStr);
             if (res != null) return res;
 
             if (configuredRelayUrl != null && !configuredRelayUrl.trim().isEmpty()) {
                 res = fetchViaRelay(urlStr, configuredRelayUrl);
                 if (res != null) return res;
             }
-            if (configuredRelay2Url != null && !configuredRelay2Url.trim().isEmpty()) {
-                res = fetchViaRelay(urlStr, configuredRelay2Url);
-                if (res != null) return res;
-            }
-            return fetchDirect(urlStr);
+            return fetchViaProxy(urlStr);
         }
     }
 
@@ -1965,8 +2012,8 @@ public class SofaScoreClient {
             conn = (HttpURLConnection) u.openConnection();
             conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36");
             conn.setRequestProperty("Accept", "application/json, text/plain, */*");
-            conn.setConnectTimeout(2500);
-            conn.setReadTimeout(3000);
+            conn.setConnectTimeout(7000);
+            conn.setReadTimeout(8000);
             int code = conn.getResponseCode();
             if (code == 200) {
                 return readStream(conn.getInputStream());
@@ -2036,8 +2083,12 @@ public class SofaScoreClient {
             conn.setRequestProperty("Referer", "https://www.sofascore.com/");
             conn.setRequestProperty("Accept", "application/json, text/plain, */*");
             conn.setRequestProperty("Accept-Language", "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
-            conn.setConnectTimeout(2500);
-            conn.setReadTimeout(3000);
+            if (!isSocks && user != null && pass != null) {
+                String authHeader = "Basic " + android.util.Base64.encodeToString((user + ":" + pass).getBytes("UTF-8"), android.util.Base64.NO_WRAP);
+                conn.setRequestProperty("Proxy-Authorization", authHeader);
+            }
+            conn.setConnectTimeout(7000);
+            conn.setReadTimeout(8000);
             int code = conn.getResponseCode();
             if (code == 200) {
                 return readStream(conn.getInputStream());
@@ -2100,8 +2151,8 @@ public class SofaScoreClient {
         conn.setRequestProperty("Referer", "https://www.sofascore.com/");
         conn.setRequestProperty("Accept", "application/json, text/plain, */*");
         conn.setRequestProperty("Accept-Language", "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
-        conn.setConnectTimeout(2500);
-        conn.setReadTimeout(3000);
+        conn.setConnectTimeout(5000);
+        conn.setReadTimeout(7000);
         return conn;
     }
 

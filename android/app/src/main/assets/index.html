@@ -137,12 +137,22 @@
           </div>
 
           <div class="connection-mode-group">
+            <label class="mode-option" id="mode-opt-direct">
+              <input type="radio" name="conn_mode" value="direct" onchange="handleConnectionModeChange(this.value)" checked>
+              <div class="mode-info">
+                <div class="mode-title-row">
+                  <span class="mode-title">Прямое подключение</span>
+                  <span class="mode-badge">Рекомендуется</span>
+                </div>
+                <div class="mode-desc">Прямой доступ к поставщикам данных (Cronet)</div>
+              </div>
+            </label>
+
             <label class="mode-option" id="mode-opt-auto">
-              <input type="radio" name="conn_mode" value="auto" onchange="handleConnectionModeChange(this.value)" checked>
+              <input type="radio" name="conn_mode" value="auto" onchange="handleConnectionModeChange(this.value)">
               <div class="mode-info">
                 <div class="mode-title-row">
                   <span class="mode-title">Автоматический выбор</span>
-                  <span class="mode-badge">Рекомендуется</span>
                 </div>
                 <div class="mode-desc">Оптимальный подбор лучшего канала связи</div>
               </div>
@@ -164,27 +174,7 @@
                 <div class="mode-title-row">
                   <span class="mode-title">Основной сервер</span>
                 </div>
-                <div class="mode-desc">Выделенный европейский узел связи</div>
-              </div>
-            </label>
-
-            <label class="mode-option" id="mode-opt-relay2">
-              <input type="radio" name="conn_mode" value="relay2" onchange="handleConnectionModeChange(this.value)">
-              <div class="mode-info">
-                <div class="mode-title-row">
-                  <span class="mode-title">Резервный сервер</span>
-                </div>
-                <div class="mode-desc">Резервный канал высокой доступности</div>
-              </div>
-            </label>
-
-            <label class="mode-option" id="mode-opt-direct">
-              <input type="radio" name="conn_mode" value="direct" onchange="handleConnectionModeChange(this.value)">
-              <div class="mode-info">
-                <div class="mode-title-row">
-                  <span class="mode-title">Прямое подключение</span>
-                </div>
-                <div class="mode-desc">Прямой доступ к поставщикам данных</div>
+                <div class="mode-desc">Выделенный узел связи (Render)</div>
               </div>
             </label>
           </div>
@@ -193,9 +183,10 @@
           <div class="settings-config-box">
             <div class="settings-sub-label">Пользовательский прокси-сервер</div>
             <div class="settings-input-group">
-              <input type="text" id="custom-proxy-input" class="settings-input" placeholder="Используется встроенный защищенный прокси" onchange="handleCustomProxyChange(this.value)">
+              <input type="text" id="custom-proxy-input" class="settings-input" placeholder="socks5://логин:пароль@ip:порт" onchange="handleCustomProxyChange(this.value)">
               <button class="settings-mini-btn" onclick="resetDefaultProxy()">Сброс</button>
             </div>
+            <div class="settings-input-hint">Примеры: socks5://user:pass@host:port, http://user:pass@host:port или host:port</div>
           </div>
 
           <!-- Проверка соединения -->

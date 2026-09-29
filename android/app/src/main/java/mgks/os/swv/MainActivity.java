@@ -518,18 +518,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
 
             @Override
             public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
-                if (permissionManager.isLocationPermissionGranted()) {
-                    // Allow geolocation for both https:// and file:// origins.
-                    // The 'false' parameter means the permission is NOT retained across origins.
-                    // This is especially important for offline pages (file://) which would
-                    // otherwise be blocked by the WebView's origin security. (fixes #387)
-                    callback.invoke(origin, true, false);
-                } else {
-                    // If permission is not granted, request it.
-                    permissionManager.requestInitialPermissions();
-                    // Still grant origin permission so the page can retry after getting runtime permission
-                    callback.invoke(origin, true, false);
-                }
+                callback.invoke(origin, false, false);
             }
         };
     }
@@ -566,16 +555,8 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
         }
         SWVContext.asw_loading_text = findViewById(R.id.msw_loading_text);
 
-        // Log device info and handle location permissions
+        // Device info
         fns.get_info(this);
-
-        // A Centralized Permission Request on Launch
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            permissionManager.requestInitialPermissions();
-        }, 1500);
-
-        // Get FCM token for notifications
-        setupFirebaseMessaging();
     }
 
     // Options menu for drawer theme

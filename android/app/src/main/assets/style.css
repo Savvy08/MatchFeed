@@ -710,6 +710,13 @@ body {
   background: #D1D5DB;
 }
 
+.settings-input-hint {
+  font-size: 11px;
+  color: #6B7280;
+  margin-top: 5px;
+  line-height: 1.3;
+}
+
 .connection-test-row {
   display: flex;
   align-items: center;
@@ -2127,6 +2134,10 @@ body.dark-mode .settings-config-box {
 
 body.dark-mode .settings-sub-label {
   color: #D1D5DB;
+}
+
+body.dark-mode .settings-input-hint {
+  color: #9CA3AF;
 }
 
 body.dark-mode .settings-input {

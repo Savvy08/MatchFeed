@@ -294,7 +294,11 @@ function openMatchesFeed() {
     p.classList.toggle('active', p.dataset.status === 'all');
   });
   showView('feed');
-  renderMatches();
+  if (!matches || matches.length === 0) {
+    fetchMatches();
+  } else {
+    renderMatches();
+  }
 }
 
 function showFavorites() {
@@ -456,7 +460,7 @@ async function apiGet(params) {
             delete nativeBridgeCallbacks[reqId];
             resolve({ success: false, error: 'Время ожидания ответа истекло' });
           }
-        }, 12000);
+        }, 25000);
 
         nativeBridgeCallbacks[reqId] = (data) => {
           clearTimeout(timer);
@@ -938,8 +942,8 @@ function renderMatches() {
     items.forEach(m => {
       const isFav = isFavoriteMatch(m.id);
       const isLive = m.status === 'live';
-      const homeScore = m.homeTeam.score !== null && m.homeTeam.score !== undefined ? m.homeTeam.score : '-';
-      const awayScore = m.awayTeam.score !== null && m.awayTeam.score !== undefined ? m.awayTeam.score : '-';
+      const homeScore = m.homeTeam?.score !== null && m.homeTeam?.score !== undefined ? m.homeTeam.score : '-';
+      const awayScore = m.awayTeam?.score !== null && m.awayTeam?.score !== undefined ? m.awayTeam.score : '-';
       const timeStr = formatMatchTime(m);
 
       const starIcon = isFav
@@ -954,11 +958,11 @@ function renderMatches() {
           </div>
           <div class="match-teams">
             <div class="team-line">
-              <span>${escapeHtml(m.homeTeam.name)}</span>
+              <span>${escapeHtml(m.homeTeam?.name || 'Команда 1')}</span>
               <span class="team-score">${homeScore}</span>
             </div>
             <div class="team-line">
-              <span>${escapeHtml(m.awayTeam.name)}</span>
+              <span>${escapeHtml(m.awayTeam?.name || 'Команда 2')}</span>
               <span class="team-score">${awayScore}</span>
             </div>
           </div>
@@ -1850,8 +1854,8 @@ function onPlayerSearchInput(val) {
 
   currentSearchQuery = q.toLowerCase();
 
-  // Instant response from memory cache
-  if (playerSearchCache.has(currentSearchQuery)) {
+  // Instant response from memory cache (only if non-empty)
+  if (playerSearchCache.has(currentSearchQuery) && playerSearchCache.get(currentSearchQuery).length > 0) {
     if (dropdown) renderPlayerSearchResults(playerSearchCache.get(currentSearchQuery), dropdown);
     return;
   }
@@ -1863,7 +1867,9 @@ function onPlayerSearchInput(val) {
       if (currentSearchQuery !== activeQuery) return; // Discard stale response
 
       const players = (data && data.success && Array.isArray(data.players)) ? data.players : [];
-      playerSearchCache.set(activeQuery, players);
+      if (players.length > 0) {
+        playerSearchCache.set(activeQuery, players);
+      }
 
       if (dropdown) {
         renderPlayerSearchResults(players, dropdown);
@@ -1874,7 +1880,7 @@ function onPlayerSearchInput(val) {
         dropdown.classList.remove('hidden');
       }
     }
-  }, 500);
+  }, 400);
 }
 
 function selectSearchedPlayer(id, name) {
@@ -1902,7 +1908,7 @@ async function openPlayerProfile(playerId, playerName) {
   if (content) content.innerHTML = '<div class="feed-loader">Загрузка профиля и статистики игрока...</div>';
 
   try {
-    const data = await apiGet({ action: 'player', id: playerId, page: 0 });
+    const data = await apiGet({ action: 'player', id: playerId, page: 0, name: playerName });
 
     if (!data || !data.success) {
       if (content) {
@@ -1918,9 +1924,14 @@ async function openPlayerProfile(playerId, playerName) {
     }
 
     const prof = data.profile || { name: playerName };
+    const validName = (prof.name && prof.name !== 'Игрок') ? prof.name : (playerName && playerName !== 'Игрок' ? playerName : (prof.name || 'Игрок'));
+    prof.name = validName;
+    if (!prof.fullName || prof.fullName === 'Игрок') {
+      prof.fullName = validName;
+    }
     currentPlayerProfile = {
       id: playerId,
-      name: prof.name || playerName,
+      name: validName,
       country: prof.country || '',
       ranking: prof.ranking || null,
       sport: prof.sport || currentSport
@@ -2555,10 +2566,12 @@ async function checkAutoCleanCache() {
 
 // Настройки подключения и управление кэшем
 function getConnectionSettings() {
-  const defaults = { mode: 'auto', relayUrl: '', relay2Url: '', customProxy: '' };
+  const defaults = { mode: 'direct', relayUrl: '', relay2Url: '', customProxy: '' };
   try {
     const raw = localStorage.getItem('matchfeed_connection_settings');
-    return raw ? Object.assign(defaults, JSON.parse(raw)) : defaults;
+    const merged = raw ? Object.assign(defaults, JSON.parse(raw)) : defaults;
+    if (!merged.mode) merged.mode = 'direct';
+    return merged;
   } catch (e) {
     return defaults;
   }
@@ -2600,6 +2613,9 @@ function handleConnectionModeChange(mode) {
     const r = opt.querySelector('input[type="radio"]');
     opt.classList.toggle('active', r && r.value === mode);
   });
+
+  playerSearchCache.clear();
+  fetchMatches();
 
   const statusMsg = document.getElementById('connection-status-msg');
   if (statusMsg) {
