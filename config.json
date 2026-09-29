@@ -1,4 +1,6 @@
 {
+  "connection_mode": "auto",
+  "relay_url": "",
   "proxy": "",
   "base_urls": [
     "https://api.sofascore.com",

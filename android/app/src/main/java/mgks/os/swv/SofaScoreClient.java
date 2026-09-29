@@ -11,12 +11,18 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -35,6 +41,18 @@ import java.util.regex.Pattern;
 public class SofaScoreClient {
     private static final String TAG = "SofaScoreClient";
     private static CronetEngine cronetEngine;
+    private static Context appContext;
+    private static File cacheDir;
+    private static String currentConnectionMode = "auto";
+    private static String configuredRelayUrl = "";
+
+    // Reliable fallback proxy endpoints for sports data
+    private static final String[] PROXY_SERVERS = new String[] {
+        "103.152.112.162:80",
+        "45.144.150.77:8080",
+        "185.199.229.156:7492",
+        "194.38.22.181:80"
+    };
 
     // Status translations
     public static final Map<String, String> STATUS_RU = new HashMap<>();
@@ -89,6 +107,17 @@ public class SofaScoreClient {
     }
 
     public static synchronized void init(Context context) {
+        if (context != null) {
+            appContext = context.getApplicationContext();
+            try {
+                cacheDir = new File(appContext.getCacheDir(), "sofascore_cache");
+                if (!cacheDir.exists()) {
+                    cacheDir.mkdirs();
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error initializing cache dir", e);
+            }
+        }
         if (cronetEngine != null) return;
         try {
             com.google.android.gms.net.CronetProviderInstaller.installProvider(context.getApplicationContext());
@@ -105,6 +134,144 @@ public class SofaScoreClient {
         } catch (Throwable t) {
             Log.w(TAG, "CronetEngine initialization fallback", t);
         }
+    }
+
+    // Disk cache helpers
+    private static File getCacheFile(String key) {
+        if (cacheDir == null && appContext != null) {
+            try {
+                cacheDir = new File(appContext.getCacheDir(), "sofascore_cache");
+                if (!cacheDir.exists()) cacheDir.mkdirs();
+            } catch (Exception ignored) {}
+        }
+        if (cacheDir == null) return null;
+
+        String safe = key.replaceAll("[^a-zA-Z0-9_-]", "_");
+        if (safe.length() > 60) {
+            try {
+                MessageDigest md = MessageDigest.getInstance("MD5");
+                byte[] d = md.digest(key.getBytes(StandardCharsets.UTF_8));
+                StringBuilder sb = new StringBuilder();
+                for (byte b : d) sb.append(String.format(Locale.US, "%02x", b));
+                safe = sb.toString();
+            } catch (Exception ignored) {
+                safe = safe.substring(0, 60);
+            }
+        }
+        return new File(cacheDir, safe + ".json");
+    }
+
+    public static String getDiskCache(String key, long ttlSeconds) {
+        try {
+            File file = getCacheFile(key);
+            if (file != null && file.exists()) {
+                long age = (System.currentTimeMillis() - file.lastModified()) / 1000L;
+                if (ttlSeconds <= 0 || age < ttlSeconds) {
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    try (InputStream is = new FileInputStream(file)) {
+                        byte[] buf = new byte[8192];
+                        int n;
+                        while ((n = is.read(buf)) != -1) {
+                            baos.write(buf, 0, n);
+                        }
+                    }
+                    return baos.toString("UTF-8");
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Cache read error for " + key, e);
+        }
+        return null;
+    }
+
+    public static void putDiskCache(String key, String data) {
+        if (data == null || data.isEmpty()) return;
+        try {
+            File file = getCacheFile(key);
+            if (file != null) {
+                try (FileOutputStream fos = new FileOutputStream(file)) {
+                    fos.write(data.getBytes(StandardCharsets.UTF_8));
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Cache write error for " + key, e);
+        }
+    }
+
+    public static String getCacheInfoJson() {
+        int count = 0;
+        long totalBytes = 0;
+        try {
+            if (cacheDir != null && cacheDir.exists()) {
+                File[] files = cacheDir.listFiles();
+                if (files != null) {
+                    for (File f : files) {
+                        if (f.isFile()) {
+                            count++;
+                            totalBytes += f.length();
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Cache info error", e);
+        }
+        return "{\"success\":true,\"count\":" + count + ",\"bytes\":" + totalBytes + ",\"formattedSize\":\"" + formatBytes(totalBytes) + "\"}";
+    }
+
+    public static String clearCacheJson() {
+        int deleted = 0;
+        long freed = 0;
+        try {
+            if (cacheDir != null && cacheDir.exists()) {
+                File[] files = cacheDir.listFiles();
+                if (files != null) {
+                    for (File f : files) {
+                        if (f.isFile()) {
+                            freed += f.length();
+                            if (f.delete()) {
+                                deleted++;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Clear cache error", e);
+        }
+        return "{\"success\":true,\"deletedFiles\":" + deleted + ",\"freedBytes\":" + freed + ",\"formattedFreed\":\"" + formatBytes(freed) + "\"}";
+    }
+
+    public static String cleanOldCacheJson(int days) {
+        int deleted = 0;
+        long freed = 0;
+        long ttlMillis = (long) Math.max(7, Math.min(30, days)) * 86400L * 1000L;
+        long now = System.currentTimeMillis();
+        try {
+            if (cacheDir != null && cacheDir.exists()) {
+                File[] files = cacheDir.listFiles();
+                if (files != null) {
+                    for (File f : files) {
+                        if (f.isFile() && (now - f.lastModified() > ttlMillis)) {
+                            freed += f.length();
+                            if (f.delete()) {
+                                deleted++;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Clean old cache error", e);
+        }
+        return "{\"success\":true,\"days\":" + days + ",\"deletedFiles\":" + deleted + ",\"freedBytes\":" + freed + ",\"formattedFreed\":\"" + formatBytes(freed) + "\"}";
+    }
+
+    private static String formatBytes(long bytes) {
+        if (bytes <= 0) return "0 КБ";
+        if (bytes < 1024) return bytes + " Б";
+        if (bytes < 1024 * 1024) return String.format(Locale.US, "%.1f КБ", bytes / 1024.0);
+        return String.format(Locale.US, "%.1f МБ", bytes / (1024.0 * 1024.0));
     }
 
     // Official Russian name resolver from fieldTranslations
@@ -168,6 +335,16 @@ public class SofaScoreClient {
             } catch (Exception ignored) {}
         }
 
+        // Apply connection settings if passed
+        if (params.containsKey("conn_mode")) {
+            currentConnectionMode = params.get("conn_mode");
+        } else if (params.containsKey("connection_mode")) {
+            currentConnectionMode = params.get("connection_mode");
+        }
+        if (params.containsKey("relay_url")) {
+            configuredRelayUrl = params.get("relay_url");
+        }
+
         try {
             switch (action) {
                 case "live":
@@ -181,9 +358,16 @@ public class SofaScoreClient {
                 case "search":
                     return handleSearchAction(params.get("q"));
                 case "cache_info":
+                    return getCacheInfoJson();
                 case "clear_cache":
-                case "clean_old_cache":
-                    return "{\"success\":true,\"count\":0,\"bytes\":0,\"formattedSize\":\"0 КБ\",\"deletedFiles\":0,\"freedBytes\":0,\"formattedFreed\":\"0 КБ\"}";
+                    return clearCacheJson();
+                case "clean_old_cache": {
+                    int days = 7;
+                    try { days = Integer.parseInt(params.getOrDefault("days", "7")); } catch (Exception ignored) {}
+                    return cleanOldCacheJson(days);
+                }
+                case "test_connection":
+                    return handleTestConnection();
                 default:
                     return "{\"success\":false,\"error\":\"Неизвестное действие: " + action + "\"}";
             }
@@ -226,6 +410,11 @@ public class SofaScoreClient {
     // Interceptor entry point for api.php URLs
     public static WebResourceResponse handleRequest(Uri uri) {
         try {
+            String connMode = getParam(uri, "conn_mode");
+            if (connMode != null && !connMode.isEmpty()) currentConnectionMode = connMode;
+            String relayUrl = getParam(uri, "relay_url");
+            if (relayUrl != null) configuredRelayUrl = relayUrl;
+
             String action = getParam(uri, "action");
             if (action == null || action.trim().isEmpty()) action = "live";
             action = action.trim().toLowerCase(Locale.US);
@@ -244,9 +433,16 @@ public class SofaScoreClient {
                 case "image":
                     return handleImageAction(getParam(uri, "id"));
                 case "cache_info":
+                    return jsonResponse(getCacheInfoJson());
                 case "clear_cache":
-                case "clean_old_cache":
-                    return jsonResponse("{\"success\":true,\"count\":0,\"bytes\":0,\"formattedSize\":\"0 КБ\",\"deletedFiles\":0,\"freedBytes\":0,\"formattedFreed\":\"0 КБ\"}");
+                    return jsonResponse(clearCacheJson());
+                case "clean_old_cache": {
+                    int days = 7;
+                    try { days = Integer.parseInt(getParam(uri, "days")); } catch (Exception ignored) {}
+                    return jsonResponse(cleanOldCacheJson(days));
+                }
+                case "test_connection":
+                    return jsonResponse(handleTestConnection());
                 default:
                     return errorResponse("Неизвестное действие: " + action);
             }
@@ -1592,6 +1788,26 @@ public class SofaScoreClient {
             return svgFallbackResponse();
         }
 
+        // Check disk cache first for avatar
+        File imgCache = getCacheFile("img_" + id);
+        if (imgCache != null && imgCache.exists()) {
+            try {
+                byte[] data = new byte[(int) imgCache.length()];
+                try (InputStream fis = new FileInputStream(imgCache)) {
+                    int r = 0;
+                    while (r < data.length) {
+                        int read = fis.read(data, r, data.length - r);
+                        if (read == -1) break;
+                        r += read;
+                    }
+                }
+                Map<String, String> headers = new HashMap<>();
+                headers.put("Access-Control-Allow-Origin", "*");
+                headers.put("Cache-Control", "public, max-age=2592000");
+                return new WebResourceResponse("image/webp", null, 200, "OK", headers, new ByteArrayInputStream(data));
+            } catch (Exception ignored) {}
+        }
+
         // Try img.sofascore.com first (direct CDN without 403 blocks)
         String[] urls = new String[] {
             "https://img.sofascore.com/api/v1/team/" + id + "/image",
@@ -1612,6 +1828,12 @@ public class SofaScoreClient {
                     while ((n = is.read(buffer)) != -1) {
                         baos.write(buffer, 0, n);
                     }
+                    byte[] imgBytes = baos.toByteArray();
+                    if (imgCache != null) {
+                        try (FileOutputStream fos = new FileOutputStream(imgCache)) {
+                            fos.write(imgBytes);
+                        } catch (Exception ignored) {}
+                    }
                     String contentType = conn.getContentType();
                     if (contentType == null || contentType.isEmpty()) {
                         contentType = "image/webp";
@@ -1619,7 +1841,7 @@ public class SofaScoreClient {
                     Map<String, String> headers = new HashMap<>();
                     headers.put("Access-Control-Allow-Origin", "*");
                     headers.put("Cache-Control", "public, max-age=604800");
-                    return new WebResourceResponse(contentType, null, 200, "OK", headers, new ByteArrayInputStream(baos.toByteArray()));
+                    return new WebResourceResponse(contentType, null, 200, "OK", headers, new ByteArrayInputStream(imgBytes));
                 }
             } catch (Exception e) {
                 Log.w(TAG, "Failed to load image from " + url, e);
@@ -1632,32 +1854,180 @@ public class SofaScoreClient {
         return svgFallbackResponse();
     }
 
-    // Network helper
+    // Network helper with cache and connection mode routing
     public static String fetchString(String urlStr) {
+        long ttlSeconds = 7200; // default 2 hours cache for details/profiles
+        if (urlStr.contains("/events/live")) {
+            ttlSeconds = 5; // 5 seconds for live
+        } else if (urlStr.contains("/search/")) {
+            ttlSeconds = 3600; // 1 hour for search
+        }
+
+        // 1. Check cache first
+        String cached = getDiskCache(urlStr, ttlSeconds);
+        if (cached != null && !cached.isEmpty()) {
+            return cached;
+        }
+
+        // 2. Fetch from network
+        String result = fetchStringNetworkOnly(urlStr);
+        if (result != null && !result.isEmpty()) {
+            putDiskCache(urlStr, result);
+            return result;
+        }
+
+        // 3. Fallback to stale cache if network failed
+        String stale = getDiskCache(urlStr, -1);
+        if (stale != null && !stale.isEmpty()) {
+            Log.d(TAG, "Using stale cache for " + urlStr);
+            return stale;
+        }
+
+        return null;
+    }
+
+    public static String fetchStringNetworkOnly(String urlStr) {
+        String mode = currentConnectionMode;
+        if (mode == null || mode.isEmpty()) mode = "auto";
+
+        if ("relay".equalsIgnoreCase(mode)) {
+            String res = fetchViaRelay(urlStr);
+            if (res != null) return res;
+        } else if ("proxy".equalsIgnoreCase(mode)) {
+            String res = fetchViaProxy(urlStr);
+            if (res != null) return res;
+        } else if ("direct".equalsIgnoreCase(mode)) {
+            String res = fetchDirect(urlStr);
+            if (res != null) return res;
+        } else {
+            // Auto mode: relay (if set) -> direct -> proxy
+            if (configuredRelayUrl != null && !configuredRelayUrl.trim().isEmpty()) {
+                String res = fetchViaRelay(urlStr);
+                if (res != null) return res;
+            }
+            String res = fetchDirect(urlStr);
+            if (res != null) return res;
+            res = fetchViaProxy(urlStr);
+            if (res != null) return res;
+        }
+        return null;
+    }
+
+    private static String fetchDirect(String urlStr) {
         HttpURLConnection conn = null;
         try {
             conn = openConnection(urlStr);
             int code = conn.getResponseCode();
             if (code == 200) {
-                InputStream is = conn.getInputStream();
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                byte[] buffer = new byte[8192];
-                int read;
-                while ((read = is.read(buffer)) != -1) {
-                    baos.write(buffer, 0, read);
-                }
-                return baos.toString("UTF-8");
+                return readStream(conn.getInputStream());
             } else {
-                Log.w(TAG, "HTTP " + code + " for " + urlStr);
+                Log.w(TAG, "Direct HTTP " + code + " for " + urlStr);
             }
         } catch (Exception e) {
-            Log.e(TAG, "Network error fetching " + urlStr, e);
+            Log.w(TAG, "Direct error fetching " + urlStr + ": " + e.getMessage());
         } finally {
             if (conn != null) {
                 try { conn.disconnect(); } catch (Exception ignored) {}
             }
         }
         return null;
+    }
+
+    private static String fetchViaRelay(String urlStr) {
+        if (configuredRelayUrl == null || configuredRelayUrl.trim().isEmpty()) return null;
+        HttpURLConnection conn = null;
+        try {
+            String relay = configuredRelayUrl.trim();
+            String target;
+            if (relay.contains("?url=")) {
+                target = relay + URLEncoder.encode(urlStr, "UTF-8");
+            } else if (relay.endsWith("?")) {
+                target = relay + "url=" + URLEncoder.encode(urlStr, "UTF-8");
+            } else if (relay.contains("?")) {
+                target = relay + "&url=" + URLEncoder.encode(urlStr, "UTF-8");
+            } else {
+                target = relay.replaceAll("/+$", "") + "/?url=" + URLEncoder.encode(urlStr, "UTF-8");
+            }
+            URL u = new URL(target);
+            conn = (HttpURLConnection) u.openConnection();
+            conn.setRequestProperty("User-Agent", "MatchFeedApp/2.1 (Android)");
+            conn.setRequestProperty("Accept", "application/json, text/plain, */*");
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
+            int code = conn.getResponseCode();
+            if (code == 200) {
+                return readStream(conn.getInputStream());
+            } else {
+                Log.w(TAG, "Relay HTTP " + code + " for " + target);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Relay error for " + urlStr + ": " + e.getMessage());
+        } finally {
+            if (conn != null) {
+                try { conn.disconnect(); } catch (Exception ignored) {}
+            }
+        }
+        return null;
+    }
+
+    private static String fetchViaProxy(String urlStr) {
+        for (String proxyEntry : PROXY_SERVERS) {
+            HttpURLConnection conn = null;
+            try {
+                String[] parts = proxyEntry.split(":");
+                String host = parts[0];
+                int port = Integer.parseInt(parts[1]);
+                Proxy proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(host, port));
+                URL u = new URL(urlStr);
+                conn = (HttpURLConnection) u.openConnection(proxy);
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36");
+                conn.setRequestProperty("Origin", "https://www.sofascore.com");
+                conn.setRequestProperty("Referer", "https://www.sofascore.com/");
+                conn.setRequestProperty("Accept", "application/json, text/plain, */*");
+                conn.setRequestProperty("Accept-Language", "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
+                conn.setConnectTimeout(5000);
+                conn.setReadTimeout(5000);
+                int code = conn.getResponseCode();
+                if (code == 200) {
+                    return readStream(conn.getInputStream());
+                }
+            } catch (Exception e) {
+                Log.d(TAG, "Proxy " + proxyEntry + " failed for " + urlStr);
+            } finally {
+                if (conn != null) {
+                    try { conn.disconnect(); } catch (Exception ignored) {}
+                }
+            }
+        }
+        return null;
+    }
+
+    private static String readStream(InputStream is) throws Exception {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int read;
+        while ((read = is.read(buffer)) != -1) {
+            baos.write(buffer, 0, read);
+        }
+        return baos.toString("UTF-8");
+    }
+
+    public static String handleTestConnection() {
+        long start = System.currentTimeMillis();
+        String testUrl = "https://api.sofascore.com/api/v1/sport/table-tennis/events/live";
+        String raw = fetchStringNetworkOnly(testUrl);
+        long duration = System.currentTimeMillis() - start;
+        if (raw != null && raw.contains("events")) {
+            try {
+                JSONObject obj = new JSONObject(raw);
+                JSONArray events = obj.optJSONArray("events");
+                int count = events != null ? events.length() : 0;
+                return "{\"success\":true,\"matches\":[{\"count\":" + count + "}],\"duration\":" + duration + "}";
+            } catch (Exception ignored) {
+                return "{\"success\":true,\"matches\":[],\"duration\":" + duration + "}";
+            }
+        }
+        return "{\"success\":false,\"error\":\"HTTP 403 или сервер недоступен\",\"duration\":" + duration + "}";
     }
 
     private static HttpURLConnection openConnection(String urlStr) throws Exception {

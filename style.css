@@ -560,6 +560,178 @@ body {
 }
 
 /* Настройки и кэш */
+.settings-view-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 600px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.settings-card {
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.settings-card-header {
+  margin-bottom: 14px;
+}
+
+.settings-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.settings-card-desc {
+  font-size: 12px;
+  color: #6B7280;
+  margin-top: 2px;
+}
+
+.connection-mode-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mode-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1.5px solid #E5E7EB;
+  border-radius: 12px;
+  cursor: pointer;
+  background: #F9FAFB;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.mode-option input[type="radio"] {
+  margin-top: 3px;
+  accent-color: #2563EB;
+  cursor: pointer;
+}
+
+.mode-option.active,
+.mode-option:has(input[type="radio"]:checked) {
+  border-color: #2563EB;
+  background: #EFF6FF;
+}
+
+.mode-info {
+  flex: 1;
+}
+
+.mode-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mode-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.mode-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #DBEAFE;
+  color: #1D4ED8;
+  letter-spacing: 0.3px;
+}
+
+.mode-desc {
+  font-size: 12px;
+  color: #6B7280;
+  margin-top: 3px;
+  line-height: 1.35;
+}
+
+.settings-config-box {
+  margin-top: 12px;
+  padding: 12px;
+  background: #F3F4F6;
+  border-radius: 10px;
+}
+
+.settings-sub-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.settings-input-group {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #FFFFFF;
+  color: #111827;
+  outline: none;
+}
+
+.settings-input:focus {
+  border-color: #2563EB;
+}
+
+.settings-mini-btn {
+  padding: 8px 14px;
+  background: #E5E7EB;
+  color: #374151;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.settings-mini-btn:hover {
+  background: #D1D5DB;
+}
+
+.connection-test-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.connection-status-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4B5563;
+}
+
+.connection-status-text.ok {
+  color: #059669;
+}
+
+.connection-status-text.fail {
+  color: #DC2626;
+}
+
 .settings-section {
   padding: 8px 0;
   border-bottom: 1px solid #F3F4F6;
@@ -1911,6 +2083,67 @@ body.dark-mode .modal-btn-close:active {
 }
 
 /* Настройки в темной теме */
+body.dark-mode .settings-card {
+  background: #111827;
+  border-color: #1F2937;
+  box-shadow: none;
+}
+
+body.dark-mode .settings-card-title {
+  color: #F9FAFB;
+}
+
+body.dark-mode .settings-card-desc {
+  color: #9CA3AF;
+}
+
+body.dark-mode .mode-option {
+  background: #1F2937;
+  border-color: #374151;
+}
+
+body.dark-mode .mode-option.active,
+body.dark-mode .mode-option:has(input[type="radio"]:checked) {
+  border-color: #3B82F6;
+  background: rgba(37, 99, 235, 0.15);
+}
+
+body.dark-mode .mode-title {
+  color: #F9FAFB;
+}
+
+body.dark-mode .mode-desc {
+  color: #9CA3AF;
+}
+
+body.dark-mode .mode-badge {
+  background: rgba(37, 99, 235, 0.3);
+  color: #93C5FD;
+}
+
+body.dark-mode .settings-config-box {
+  background: #1F2937;
+}
+
+body.dark-mode .settings-sub-label {
+  color: #D1D5DB;
+}
+
+body.dark-mode .settings-input {
+  background: #111827;
+  border-color: #374151;
+  color: #F9FAFB;
+}
+
+body.dark-mode .settings-mini-btn {
+  background: #374151;
+  color: #E5E7EB;
+}
+
+body.dark-mode .settings-mini-btn:hover {
+  background: #4B5563;
+}
+
 body.dark-mode .settings-section {
   border-bottom-color: #1F2937;
 }

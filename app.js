@@ -121,6 +121,11 @@ function saveCurrentNavState() {
       playerFilter: playerMatchesFilter,
       scrollY: window.scrollY
     };
+  } else if (currentView === 'settings') {
+    return {
+      view: 'settings',
+      scrollY: window.scrollY
+    };
   } else {
     return {
       view: 'feed',
@@ -154,6 +159,11 @@ function navigateBack() {
     return;
   }
 
+  if (currentView === 'settings') {
+    openMatchesFeed();
+    return;
+  }
+
   if (window.history.state && window.history.state.navIndex > 0) {
     window.history.back();
     return;
@@ -171,6 +181,10 @@ function restorePreviousNavigation() {
   }
 
   const prev = navStack.pop();
+  if (prev.view === 'settings') {
+    openSettingsTab();
+    return;
+  }
   isRestoringNavigation = true;
 
   try {
@@ -254,10 +268,20 @@ function showView(viewName) {
     document.getElementById('nav-player-btn')?.classList.add('active');
   } else if (viewName === 'match') {
     document.getElementById('nav-matches-btn')?.classList.add('active');
+  } else if (viewName === 'settings') {
+    document.getElementById('nav-settings-btn')?.classList.add('active');
   }
 
   // Scroll to top
   window.scrollTo({ top: 0, behavior: 'instant' });
+}
+
+function openSettingsTab() {
+  if (currentView !== 'settings') {
+    pushNavigation();
+  }
+  showView('settings');
+  initSettingsTab();
 }
 
 function openMatchesFeed() {
@@ -393,9 +417,13 @@ async function apiGet(params) {
   const isAndroidApp = window.navigator.userAgent.includes('MatchFeedApp') || (window.location.protocol === 'file:');
   const action = (params.action || 'live').toLowerCase();
 
-  // Instant response for cache actions in standalone app
-  if (isAndroidApp && (action === 'cache_info' || action === 'clear_cache' || action === 'clean_old_cache')) {
-    return { success: true, count: 0, bytes: 0, formattedSize: '0 КБ', deletedFiles: 0, freedBytes: 0, formattedFreed: '0 КБ' };
+  // Attach connection mode & relay settings
+  const connSettings = getConnectionSettings();
+  if (!params.conn_mode) {
+    params.conn_mode = connSettings.mode || 'auto';
+  }
+  if (!params.relay_url && connSettings.relayUrl) {
+    params.relay_url = connSettings.relayUrl;
   }
 
   // Native bridge direct call for Android app
@@ -2455,10 +2483,125 @@ async function checkAutoCleanCache() {
   }
 }
 
-function openSettingsModal() {
-  const modal = document.getElementById('settings-modal') || document.getElementById('info-modal');
-  if (!modal) return;
+// Настройки подключения и управление кэшем
+function getConnectionSettings() {
+  const defaults = { mode: 'auto', relayUrl: '' };
+  try {
+    const raw = localStorage.getItem('matchfeed_connection_settings');
+    return raw ? Object.assign(defaults, JSON.parse(raw)) : defaults;
+  } catch (e) {
+    return defaults;
+  }
+}
 
+function saveConnectionSettings(settings) {
+  try {
+    localStorage.setItem('matchfeed_connection_settings', JSON.stringify(settings));
+  } catch (e) {}
+}
+
+function initSettingsTab() {
+  loadConnectionSettings();
+  loadCacheSettingsToUi();
+  loadCacheInfo();
+}
+
+function loadConnectionSettings() {
+  const settings = getConnectionSettings();
+  const radios = document.querySelectorAll('input[name="conn_mode"]');
+  radios.forEach(r => {
+    r.checked = (r.value === settings.mode);
+    const parent = r.closest('.mode-option');
+    if (parent) parent.classList.toggle('active', r.checked);
+  });
+
+  const relayBox = document.getElementById('relay-config-box');
+  const relayInput = document.getElementById('relay-url-input');
+  if (relayInput) {
+    relayInput.value = settings.relayUrl || '';
+  }
+  if (relayBox) {
+    relayBox.style.display = (settings.mode === 'relay' || settings.mode === 'auto') ? 'block' : 'none';
+  }
+}
+
+function handleConnectionModeChange(mode) {
+  const settings = getConnectionSettings();
+  settings.mode = mode;
+  saveConnectionSettings(settings);
+
+  document.querySelectorAll('.mode-option').forEach(opt => {
+    const r = opt.querySelector('input[type="radio"]');
+    opt.classList.toggle('active', r && r.value === mode);
+  });
+
+  const relayBox = document.getElementById('relay-config-box');
+  if (relayBox) {
+    relayBox.style.display = (mode === 'relay' || mode === 'auto') ? 'block' : 'none';
+  }
+
+  const statusMsg = document.getElementById('connection-status-msg');
+  if (statusMsg) {
+    statusMsg.textContent = 'Режим сохранен';
+    statusMsg.className = 'connection-status-text ok';
+    setTimeout(() => { if (statusMsg.textContent === 'Режим сохранен') statusMsg.textContent = ''; }, 2000);
+  }
+}
+
+function handleRelayUrlChange(url) {
+  const settings = getConnectionSettings();
+  settings.relayUrl = (url || '').trim();
+  saveConnectionSettings(settings);
+}
+
+function resetDefaultRelayUrl() {
+  const relayInput = document.getElementById('relay-url-input');
+  if (relayInput) relayInput.value = '';
+  handleRelayUrlChange('');
+}
+
+async function testConnection() {
+  const btn = document.getElementById('test-connection-btn');
+  const statusMsg = document.getElementById('connection-status-msg');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Проверка...';
+  }
+  if (statusMsg) {
+    statusMsg.textContent = 'Тестирование...';
+    statusMsg.className = 'connection-status-text';
+  }
+
+  const startTime = performance.now();
+  try {
+    const res = await apiGet({ action: 'live', sport: 'table-tennis', _test: 1 });
+    const duration = Math.round(performance.now() - startTime);
+    if (res && res.success && Array.isArray(res.matches)) {
+      if (statusMsg) {
+        statusMsg.textContent = `Успешно: получено ${res.matches.length} матчей (${duration} мс)`;
+        statusMsg.className = 'connection-status-text ok';
+      }
+    } else {
+      const err = res && res.error ? res.error : 'Нет данных';
+      if (statusMsg) {
+        statusMsg.textContent = `Ошибка: ${err}`;
+        statusMsg.className = 'connection-status-text fail';
+      }
+    }
+  } catch (e) {
+    if (statusMsg) {
+      statusMsg.textContent = `Сбой: ${e.message || 'Ошибка сети'}`;
+      statusMsg.className = 'connection-status-text fail';
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Проверить соединение';
+    }
+  }
+}
+
+function loadCacheSettingsToUi() {
   const settings = getCacheSettings();
   const toggle = document.getElementById('auto-clean-toggle');
   const select = document.getElementById('cache-period-select');
@@ -2467,38 +2610,27 @@ function openSettingsModal() {
   if (toggle) toggle.checked = !!settings.autoClean;
   if (select) select.value = String(settings.cacheDays || 7);
   if (periodRow) periodRow.style.display = settings.autoClean ? 'flex' : 'none';
+}
 
-  modal.classList.add('open');
-  document.body.style.overflow = 'hidden';
-  try {
-    window.history.pushState({ modal: 'settings' }, '');
-  } catch (e) {}
-  loadCacheInfo();
+function openSettingsModal() {
+  openSettingsTab();
 }
 
 function closeSettingsModal(isFromPopstate = false) {
-  const modal = document.getElementById('settings-modal') || document.getElementById('info-modal');
-  if (!modal) return;
-  modal.classList.remove('open');
-  document.body.style.overflow = '';
-  if (!isFromPopstate && window.history.state && window.history.state.modal === 'settings') {
-    try {
-      window.history.back();
-    } catch (e) {}
-  }
+  navigateBack();
 }
 
 function openInfoModal() {
-  openSettingsModal();
+  openSettingsTab();
 }
 
 function closeInfoModal() {
-  closeSettingsModal();
+  navigateBack();
 }
 
 function handleBackdropClick(event) {
   if (event.target === event.currentTarget) {
-    closeSettingsModal();
+    navigateBack();
   }
 }
 
