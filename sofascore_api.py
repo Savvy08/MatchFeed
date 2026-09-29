@@ -71,7 +71,7 @@ def load_config():
         defaults["proxy"] = env_proxy
     if CLI_PROXY:
         defaults["proxy"] = CLI_PROXY
-    elif not defaults.get("proxy") and (CLI_MODE in ("proxy", "auto")):
+    elif not defaults.get("proxy") and (CLI_MODE in ("proxy", "auto", "socks5", "http")):
         defaults["proxy"] = STOCK_PROXY
     if CLI_RELAY:
         defaults["relay_url"] = CLI_RELAY

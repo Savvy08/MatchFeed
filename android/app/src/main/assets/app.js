@@ -438,7 +438,7 @@ async function apiGet(params) {
   // Attach connection mode & proxy settings
   const connSettings = getConnectionSettings();
   if (!params.conn_mode) {
-    params.conn_mode = connSettings.mode || 'auto';
+    params.conn_mode = connSettings.mode || 'socks5';
   }
   if (!params.relay_url && connSettings.relayUrl) {
     params.relay_url = connSettings.relayUrl;
@@ -2566,11 +2566,11 @@ async function checkAutoCleanCache() {
 
 // Настройки подключения и управление кэшем
 function getConnectionSettings() {
-  const defaults = { mode: 'direct', relayUrl: '', relay2Url: '', customProxy: '' };
+  const defaults = { mode: 'socks5', relayUrl: '', relay2Url: '', customProxy: '' };
   try {
     const raw = localStorage.getItem('matchfeed_connection_settings');
     const merged = raw ? Object.assign(defaults, JSON.parse(raw)) : defaults;
-    if (!merged.mode) merged.mode = 'direct';
+    if (!merged.mode) merged.mode = 'socks5';
     return merged;
   } catch (e) {
     return defaults;
@@ -2593,9 +2593,12 @@ function loadConnectionSettings() {
   const settings = getConnectionSettings();
   const radios = document.querySelectorAll('input[name="conn_mode"]');
   radios.forEach(r => {
-    r.checked = (r.value === settings.mode);
+    const isMatch = (r.value === settings.mode) ||
+                    (r.value === 'socks5' && settings.mode === 'proxy') ||
+                    (r.value === 'proxy' && settings.mode === 'socks5');
+    r.checked = isMatch;
     const parent = r.closest('.mode-option');
-    if (parent) parent.classList.toggle('active', r.checked);
+    if (parent) parent.classList.toggle('active', isMatch);
   });
 
   const proxyInput = document.getElementById('custom-proxy-input');
@@ -2627,8 +2630,20 @@ function handleConnectionModeChange(mode) {
 
 function handleCustomProxyChange(val) {
   const settings = getConnectionSettings();
-  settings.customProxy = (val || '').trim();
+  const trimmed = (val || '').trim();
+  settings.customProxy = trimmed;
+  if (trimmed) {
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      settings.mode = 'http';
+    } else {
+      settings.mode = 'socks5';
+    }
+  }
   saveConnectionSettings(settings);
+  loadConnectionSettings();
+
+  playerSearchCache.clear();
+  fetchMatches();
 
   const statusMsg = document.getElementById('connection-status-msg');
   if (statusMsg) {
@@ -2803,6 +2818,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Initial load
+  loadConnectionSettings();
   initDarkMode();
   fetchMatches();
   checkAutoCleanCache();

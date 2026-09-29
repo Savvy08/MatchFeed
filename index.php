@@ -142,14 +142,24 @@
           </div>
 
           <div class="connection-mode-group">
-            <label class="mode-option" id="mode-opt-direct">
-              <input type="radio" name="conn_mode" value="direct" onchange="handleConnectionModeChange(this.value)" checked>
+            <label class="mode-option" id="mode-opt-socks5">
+              <input type="radio" name="conn_mode" value="socks5" onchange="handleConnectionModeChange(this.value)" checked>
               <div class="mode-info">
                 <div class="mode-title-row">
-                  <span class="mode-title">Прямое подключение</span>
+                  <span class="mode-title">SOCKS5 прокси</span>
                   <span class="mode-badge">Рекомендуется</span>
                 </div>
-                <div class="mode-desc">Прямой доступ к поставщикам данных (Cronet)</div>
+                <div class="mode-desc">Защищенный туннель (встроенный или пользовательский)</div>
+              </div>
+            </label>
+
+            <label class="mode-option" id="mode-opt-http">
+              <input type="radio" name="conn_mode" value="http" onchange="handleConnectionModeChange(this.value)">
+              <div class="mode-info">
+                <div class="mode-title-row">
+                  <span class="mode-title">HTTP(S) прокси</span>
+                </div>
+                <div class="mode-desc">Подключение через HTTP/HTTPS прокси-сервер</div>
               </div>
             </label>
 
@@ -163,13 +173,13 @@
               </div>
             </label>
 
-            <label class="mode-option" id="mode-opt-proxy">
-              <input type="radio" name="conn_mode" value="proxy" onchange="handleConnectionModeChange(this.value)">
+            <label class="mode-option" id="mode-opt-direct">
+              <input type="radio" name="conn_mode" value="direct" onchange="handleConnectionModeChange(this.value)">
               <div class="mode-info">
                 <div class="mode-title-row">
-                  <span class="mode-title">Защищенный прокси</span>
+                  <span class="mode-title">Прямое подключение</span>
                 </div>
-                <div class="mode-desc">Встроенный защищенный канал связи</div>
+                <div class="mode-desc">Прямой доступ к поставщикам данных (Cronet)</div>
               </div>
             </label>
 

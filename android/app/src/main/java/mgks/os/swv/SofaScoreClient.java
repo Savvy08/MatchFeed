@@ -45,11 +45,11 @@ public class SofaScoreClient {
     private static CronetEngine cronetEngine;
     private static Context appContext;
     private static File cacheDir;
-    private static String currentConnectionMode = "direct";
+    private static String currentConnectionMode = "socks5";
     private static String configuredRelayUrl = "https://matchfeed.onrender.com";
     private static String configuredRelay2Url = "";
     private static String customProxyUrl = "";
-    private static final String STOCK_PROXY = "";
+    private static final String STOCK_PROXY = "socks5://qwF2DW:YTTxrt@45.130.63.240:8000";
 
     // Reliable fallback proxy endpoints for sports data
     private static final String[] PROXY_SERVERS = new String[] {
@@ -355,6 +355,8 @@ public class SofaScoreClient {
         if (params.containsKey("custom_proxy")) {
             customProxyUrl = params.get("custom_proxy");
         }
+        Log.i(TAG, "[CONFIG] Received connection settings: mode=" + currentConnectionMode +
+                ", hasCustomProxy=" + (customProxyUrl != null && !customProxyUrl.trim().isEmpty()));
 
         try {
             switch (action) {
@@ -425,6 +427,10 @@ public class SofaScoreClient {
             if (connMode != null && !connMode.isEmpty()) currentConnectionMode = connMode;
             String relayUrl = getParam(uri, "relay_url");
             if (relayUrl != null) configuredRelayUrl = relayUrl;
+            String proxy = getParam(uri, "custom_proxy");
+            if (proxy != null && !proxy.isEmpty()) customProxyUrl = proxy;
+            Log.i(TAG, "[INTERCEPT] Intercepted api.php: mode=" + currentConnectionMode +
+                    ", hasCustomProxy=" + (customProxyUrl != null && !customProxyUrl.trim().isEmpty()));
 
             String action = getParam(uri, "action");
             if (action == null || action.trim().isEmpty()) action = "live";
@@ -1950,41 +1956,51 @@ public class SofaScoreClient {
 
     public static String fetchStringNetworkOnly(String urlStr) {
         String mode = currentConnectionMode;
-        if (mode == null || mode.isEmpty()) mode = "direct";
+        if (mode == null || mode.isEmpty()) mode = "socks5";
+        mode = mode.trim().toLowerCase(Locale.US);
 
-        if ("proxy".equalsIgnoreCase(mode)) {
-            return fetchViaProxy(urlStr);
-        } else if ("relay1".equalsIgnoreCase(mode) || "relay".equalsIgnoreCase(mode)) {
+        if ("proxy".equals(mode) || "http".equals(mode) || "socks5".equals(mode) || "socks".equals(mode)) {
+            Log.i(TAG, "[NETWORK] Route: PROXY (mode=" + mode + ") for " + urlStr);
+            return fetchViaProxy(urlStr, mode);
+        } else if ("relay1".equals(mode) || "relay".equals(mode)) {
+            Log.i(TAG, "[NETWORK] Route: RELAY1 for " + urlStr);
             return fetchViaRelay(urlStr, configuredRelayUrl);
-        } else if ("relay2".equalsIgnoreCase(mode)) {
+        } else if ("relay2".equals(mode)) {
+            Log.i(TAG, "[NETWORK] Route: RELAY2 for " + urlStr);
             return fetchViaRelay(urlStr, configuredRelay2Url);
-        } else if ("direct".equalsIgnoreCase(mode)) {
+        } else if ("direct".equals(mode)) {
+            Log.i(TAG, "[NETWORK] Route: DIRECT for " + urlStr);
             return fetchDirect(urlStr);
         } else {
             // Auto mode: try direct (Cronet HTTP/2) -> relay1 (Render) -> proxy
+            Log.i(TAG, "[NETWORK] Route: AUTO (trying direct first) for " + urlStr);
             String res = fetchDirect(urlStr);
             if (res != null) return res;
 
             if (configuredRelayUrl != null && !configuredRelayUrl.trim().isEmpty()) {
+                Log.i(TAG, "[NETWORK] Route: AUTO (direct failed, trying relay) for " + urlStr);
                 res = fetchViaRelay(urlStr, configuredRelayUrl);
                 if (res != null) return res;
             }
-            return fetchViaProxy(urlStr);
+            Log.i(TAG, "[NETWORK] Route: AUTO (fallback to proxy) for " + urlStr);
+            return fetchViaProxy(urlStr, "socks5");
         }
     }
 
     private static String fetchDirect(String urlStr) {
+        Log.i(TAG, "[DIRECT] Executing direct connection to " + urlStr);
         HttpURLConnection conn = null;
         try {
             conn = openConnection(urlStr);
             int code = conn.getResponseCode();
+            Log.i(TAG, "[DIRECT] Response HTTP " + code + " for " + urlStr);
             if (code == 200) {
                 return readStream(conn.getInputStream());
             } else {
-                Log.w(TAG, "Direct HTTP " + code + " for " + urlStr);
+                Log.w(TAG, "[DIRECT] HTTP " + code + " for " + urlStr);
             }
         } catch (Exception e) {
-            Log.w(TAG, "Direct error fetching " + urlStr + ": " + e.getMessage());
+            Log.w(TAG, "[DIRECT] Error fetching " + urlStr + ": " + e.getMessage());
         } finally {
             if (conn != null) {
                 try { conn.disconnect(); } catch (Exception ignored) {}
@@ -2031,13 +2047,30 @@ public class SofaScoreClient {
     }
 
     private static String fetchViaProxy(String urlStr) {
+        return fetchViaProxy(urlStr, currentConnectionMode);
+    }
+
+    private static String fetchViaProxy(String urlStr, String modeOverride) {
         String pStr = (customProxyUrl != null && !customProxyUrl.trim().isEmpty())
                 ? customProxyUrl.trim() : STOCK_PROXY;
-        if (pStr.isEmpty()) return null;
+        if (pStr == null || pStr.trim().isEmpty()) {
+            Log.w(TAG, "[PROXY] No proxy configured (custom and stock are empty)");
+            return null;
+        }
 
         HttpURLConnection conn = null;
         try {
-            boolean isSocks = pStr.startsWith("socks5://") || pStr.startsWith("socks://") || pStr.startsWith("socks4://");
+            boolean isSocks;
+            if (pStr.startsWith("socks5://") || pStr.startsWith("socks://") || pStr.startsWith("socks4://")) {
+                isSocks = true;
+            } else if (pStr.startsWith("http://") || pStr.startsWith("https://")) {
+                isSocks = false;
+            } else if ("http".equalsIgnoreCase(modeOverride)) {
+                isSocks = false;
+            } else {
+                isSocks = true;
+            }
+
             String cleaned = pStr.replaceFirst("^[a-zA-Z0-9]+://", "");
             String user = null;
             String pass = null;
@@ -2064,6 +2097,9 @@ public class SofaScoreClient {
                 host = cleaned;
             }
 
+            Log.i(TAG, "[PROXY] Creating client with proxy type=" + (isSocks ? "SOCKS5" : "HTTP") +
+                    ", host=" + host + ", port=" + port + ", authRequired=" + (user != null));
+
             if (user != null && pass != null) {
                 final String finalUser = user;
                 final String finalPass = pass;
@@ -2087,16 +2123,19 @@ public class SofaScoreClient {
                 String authHeader = "Basic " + android.util.Base64.encodeToString((user + ":" + pass).getBytes("UTF-8"), android.util.Base64.NO_WRAP);
                 conn.setRequestProperty("Proxy-Authorization", authHeader);
             }
-            conn.setConnectTimeout(7000);
-            conn.setReadTimeout(8000);
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(10000);
+
+            Log.i(TAG, "[PROXY] Executing request via proxy to " + urlStr);
             int code = conn.getResponseCode();
+            Log.i(TAG, "[PROXY] Response HTTP " + code + " for " + urlStr);
             if (code == 200) {
                 return readStream(conn.getInputStream());
             } else {
-                Log.w(TAG, "Proxy HTTP " + code + " for " + urlStr);
+                Log.w(TAG, "[PROXY] HTTP " + code + " for " + urlStr);
             }
         } catch (Exception e) {
-            Log.w(TAG, "Proxy error for " + urlStr + ": " + e.getMessage());
+            Log.w(TAG, "[PROXY] Error for " + urlStr + ": " + e.getMessage());
         } finally {
             if (conn != null) {
                 try { conn.disconnect(); } catch (Exception ignored) {}
