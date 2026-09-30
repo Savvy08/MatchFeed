@@ -45,8 +45,8 @@ public class SofaScoreClient {
     private static CronetEngine cronetEngine;
     private static Context appContext;
     private static File cacheDir;
-    private static String currentConnectionMode = "socks5";
-    private static String configuredRelayUrl = "https://matchfeed.onrender.com";
+    private static String currentConnectionMode = "relay1";
+    private static String configuredRelayUrl = "https://sub.mimumi.mikata.ru/matchfeed";
     private static String configuredRelay2Url = "";
     private static String customProxyUrl = "";
     private static final String STOCK_PROXY = "socks5://qwF2DW:YTTxrt@45.130.63.240:8000";
@@ -1956,7 +1956,7 @@ public class SofaScoreClient {
 
     public static String fetchStringNetworkOnly(String urlStr) {
         String mode = currentConnectionMode;
-        if (mode == null || mode.isEmpty()) mode = "socks5";
+        if (mode == null || mode.isEmpty()) mode = "relay1";
         mode = mode.trim().toLowerCase(Locale.US);
 
         if ("proxy".equals(mode) || "http".equals(mode) || "socks5".equals(mode) || "socks".equals(mode)) {
@@ -1964,7 +1964,10 @@ public class SofaScoreClient {
             return fetchViaProxy(urlStr, mode);
         } else if ("relay1".equals(mode) || "relay".equals(mode)) {
             Log.i(TAG, "[NETWORK] Route: RELAY1 for " + urlStr);
-            return fetchViaRelay(urlStr, configuredRelayUrl);
+            String res = fetchViaRelay(urlStr, configuredRelayUrl);
+            if (res != null) return res;
+            Log.w(TAG, "[NETWORK] RELAY1 failed, trying direct");
+            return fetchDirect(urlStr);
         } else if ("relay2".equals(mode)) {
             Log.i(TAG, "[NETWORK] Route: RELAY2 for " + urlStr);
             return fetchViaRelay(urlStr, configuredRelay2Url);

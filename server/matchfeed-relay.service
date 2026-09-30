@@ -1,0 +1,15 @@
+[Unit]
+Description=MatchFeed SofaScore HTTPS Relay Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/matchfeed-relay
+ExecStart=/usr/bin/python3 /opt/matchfeed-relay/server_relay.py --port 8089 --host 127.0.0.1
+Restart=always
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

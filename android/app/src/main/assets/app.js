@@ -438,10 +438,10 @@ async function apiGet(params) {
   // Attach connection mode & proxy settings
   const connSettings = getConnectionSettings();
   if (!params.conn_mode) {
-    params.conn_mode = connSettings.mode || 'socks5';
+    params.conn_mode = connSettings.mode || 'relay1';
   }
-  if (!params.relay_url && connSettings.relayUrl) {
-    params.relay_url = connSettings.relayUrl;
+  if (!params.relay_url) {
+    params.relay_url = connSettings.relayUrl || 'https://sub.mimumi.mikata.ru/matchfeed';
   }
   if (!params.relay2_url && connSettings.relay2Url) {
     params.relay2_url = connSettings.relay2Url;
@@ -2566,11 +2566,11 @@ async function checkAutoCleanCache() {
 
 // Настройки подключения и управление кэшем
 function getConnectionSettings() {
-  const defaults = { mode: 'socks5', relayUrl: '', relay2Url: '', customProxy: '' };
+  const defaults = { mode: 'relay1', relayUrl: 'https://sub.mimumi.mikata.ru/matchfeed', relay2Url: '', customProxy: '' };
   try {
     const raw = localStorage.getItem('matchfeed_connection_settings');
     const merged = raw ? Object.assign(defaults, JSON.parse(raw)) : defaults;
-    if (!merged.mode) merged.mode = 'socks5';
+    if (!merged.mode) merged.mode = 'relay1';
     return merged;
   } catch (e) {
     return defaults;

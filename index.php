@@ -141,15 +141,25 @@
             <div class="settings-card-desc">Выберите способ связи с серверами данных</div>
           </div>
 
-          <div class="connection-mode-group">
+                    <div class="connection-mode-group">
+            <label class="mode-option" id="mode-opt-relay1">
+              <input type="radio" name="conn_mode" value="relay1" checked onchange="handleConnectionModeChange(this.value)">
+              <div class="mode-info">
+                <div class="mode-title-row">
+                  <span class="mode-title">Основной сервер</span>
+                  <span class="mode-badge badge-rec">РЕКОМЕНДУЕТСЯ</span>
+                </div>
+                <div class="mode-desc">Автономный HTTPS-шлюз (работает на Ростелекоме без VPN)</div>
+              </div>
+            </label>
+
             <label class="mode-option" id="mode-opt-socks5">
-              <input type="radio" name="conn_mode" value="socks5" onchange="handleConnectionModeChange(this.value)" checked>
+              <input type="radio" name="conn_mode" value="socks5" onchange="handleConnectionModeChange(this.value)">
               <div class="mode-info">
                 <div class="mode-title-row">
                   <span class="mode-title">SOCKS5 прокси</span>
-                  <span class="mode-badge">Рекомендуется</span>
                 </div>
-                <div class="mode-desc">Защищенный туннель (встроенный или пользовательский)</div>
+                <div class="mode-desc">Защищенный туннель (пользовательский прокси)</div>
               </div>
             </label>
 
@@ -163,16 +173,6 @@
               </div>
             </label>
 
-            <label class="mode-option" id="mode-opt-auto">
-              <input type="radio" name="conn_mode" value="auto" onchange="handleConnectionModeChange(this.value)">
-              <div class="mode-info">
-                <div class="mode-title-row">
-                  <span class="mode-title">Автоматический выбор</span>
-                </div>
-                <div class="mode-desc">Оптимальный подбор лучшего канала связи</div>
-              </div>
-            </label>
-
             <label class="mode-option" id="mode-opt-direct">
               <input type="radio" name="conn_mode" value="direct" onchange="handleConnectionModeChange(this.value)">
               <div class="mode-info">
@@ -183,18 +183,16 @@
               </div>
             </label>
 
-            <label class="mode-option" id="mode-opt-relay1">
-              <input type="radio" name="conn_mode" value="relay1" onchange="handleConnectionModeChange(this.value)">
+            <label class="mode-option" id="mode-opt-auto">
+              <input type="radio" name="conn_mode" value="auto" onchange="handleConnectionModeChange(this.value)">
               <div class="mode-info">
                 <div class="mode-title-row">
-                  <span class="mode-title">Основной сервер</span>
+                  <span class="mode-title">Автоматический выбор</span>
                 </div>
-                <div class="mode-desc">Выделенный узел связи (Render)</div>
+                <div class="mode-desc">Оптимальный подбор лучшего канала связи</div>
               </div>
             </label>
-          </div>
-
-          <!-- Пользовательский прокси -->
+          </div><!-- Пользовательский прокси -->
           <div class="settings-config-box">
             <div class="settings-sub-label">Пользовательский прокси-сервер</div>
             <div class="settings-input-group">
