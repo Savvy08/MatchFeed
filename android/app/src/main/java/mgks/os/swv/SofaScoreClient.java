@@ -36,8 +36,23 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.Arrays;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.InetAddress;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import okhttp3.Cookie;
+import okhttp3.CookieJar;
+import okhttp3.Handshake;
+import okhttp3.Headers;
+import okhttp3.HttpUrl;
+import okhttp3.Interceptor;
+import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
+import okhttp3.Request;
+import okhttp3.Response;
 
 // SofaScore client providing full parity with sofascore_api.py
 public class SofaScoreClient {
@@ -476,6 +491,8 @@ public class SofaScoreClient {
         if (sport.equals("tabletennis") || sport.equals("tt") || sport.equals("table_tennis")) {
             sport = "table-tennis";
         }
+
+        runDiagnosticExperimentOnce("https://api.sofascore.com/api/v1/sport/table-tennis/events/live");
 
         String url = "https://api.sofascore.com/api/v1/sport/" + sport + "/events/live";
         String rawJson = fetchString(url);
@@ -2217,5 +2234,296 @@ public class SofaScoreClient {
         String escaped = message.replace("\"", "\\\"").replace("\n", " ");
         String json = "{\"success\":false,\"error\":\"" + escaped + "\",\"matches\":[]}";
         return jsonResponse(json);
+    }
+
+    // Network diagnostic experiment Stage 2: IP, DNS, User-Agent variants, Wire Headers, Cookies/Challenge, TLS Handshake
+    private static volatile boolean hasRunDiagnostic = false;
+
+    public static void runDiagnosticExperimentOnce(final String targetUrl) {
+        if (hasRunDiagnostic) return;
+        hasRunDiagnostic = true;
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                executeDiagnosticExperiment(targetUrl);
+            }
+        }, "NetExpThread").start();
+    }
+
+    public static String executeDiagnosticExperiment(String urlStr) {
+        StringBuilder report = new StringBuilder();
+        report.append("\n==================== [DIAG-STAGE-2] EXPERIMENT START ====================\n");
+        report.append("DEVICE / OS: ").append(android.os.Build.MANUFACTURER).append(" ")
+                .append(android.os.Build.MODEL).append(" (Android ").append(android.os.Build.VERSION.RELEASE)
+                .append(", API ").append(android.os.Build.VERSION.SDK_INT).append(")\n");
+        report.append("TARGET URL: ").append(urlStr).append("\n\n");
+
+        // 1. External IP & DNS Discovery
+        report.append("--- 1. EXTERNAL IP & DNS DISCOVERY ---\n");
+        String externalIp = getExternalIpSafe();
+        report.append("Discovered External IP: ").append(externalIp).append("\n");
+        report.append("DNS Resolution for api.sofascore.com:\n");
+        try {
+            InetAddress[] addrs = InetAddress.getAllByName("api.sofascore.com");
+            for (InetAddress a : addrs) {
+                report.append("  ").append(a.getHostAddress()).append(" (Canonical: ").append(a.getCanonicalHostName()).append(")\n");
+            }
+        } catch (Exception e) {
+            report.append("  DNS error: ").append(e.getMessage()).append("\n");
+        }
+        report.append("\n");
+
+        final Map<String, Headers> wireHeadersMap = new HashMap<>();
+        Interceptor wireInterceptor = new Interceptor() {
+            @Override
+            public Response intercept(Chain chain) throws java.io.IOException {
+                Request request = chain.request();
+                String testTag = request.header("X-Test-Tag");
+                if (testTag != null) {
+                    wireHeadersMap.put(testTag, request.headers());
+                }
+                return chain.proceed(request);
+            }
+        };
+
+        String uaChrome124 = "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36";
+        String uaChromeModern = "Mozilla/5.0 (Linux; Android 15; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Mobile Safari/537.36";
+
+        // Test 1: Cronet / openConnection with Chrome 124 UA
+        report.append("--- TEST 1: CRONET / OPENCONNECTION (Chrome 124 UA) ---\n");
+        long t0 = System.currentTimeMillis();
+        HttpURLConnection conn = null;
+        try {
+            conn = openConnection(urlStr);
+            int stCronet = conn.getResponseCode();
+            long timingCronet = System.currentTimeMillis() - t0;
+            report.append("Protocol / Status-Line: ").append(conn.getHeaderField(null)).append("\n");
+            report.append("HTTP Status: ").append(stCronet).append("\n");
+            report.append("Timing: ").append(timingCronet).append(" ms\n");
+            report.append("Response Headers:\n");
+            Map<String, List<String>> hMap = conn.getHeaderFields();
+            if (hMap != null) {
+                for (Map.Entry<String, List<String>> entry : hMap.entrySet()) {
+                    if (entry.getKey() != null) {
+                        report.append("  ").append(entry.getKey()).append(": ").append(entry.getValue()).append("\n");
+                    }
+                }
+            }
+            InputStream is = (stCronet >= 200 && stCronet < 400) ? conn.getInputStream() : conn.getErrorStream();
+            String snippet = readSnippet(is, 250);
+            report.append("Response Body (first 250 bytes):\n").append(snippet).append("\n\n");
+        } catch (Exception e) {
+            report.append("Cronet error: ").append(e.getMessage()).append("\n\n");
+        } finally {
+            if (conn != null) {
+                try { conn.disconnect(); } catch (Exception ignored) {}
+            }
+        }
+
+        // Test 2: OkHttp H2 with Chrome 124 UA (Variant A)
+        runOkHttpSubTest(report, "Test 2 (Variant A): OkHttp H2 + Chrome 124 UA", urlStr, uaChrome124, Protocol.HTTP_2, null, wireInterceptor, wireHeadersMap);
+
+        // Test 3: OkHttp H2 with Modern Chrome 134 UA (Variant B)
+        runOkHttpSubTest(report, "Test 3 (Variant B): OkHttp H2 + Modern Chrome 134 UA", urlStr, uaChromeModern, Protocol.HTTP_2, null, wireInterceptor, wireHeadersMap);
+
+        // Test 4: OkHttp H2 without manual User-Agent (Variant C)
+        runOkHttpSubTest(report, "Test 4 (Variant C): OkHttp H2 without manual User-Agent", urlStr, null, Protocol.HTTP_2, null, wireInterceptor, wireHeadersMap);
+
+        // Test 5: OkHttp HTTP/1.1 without manual User-Agent
+        runOkHttpSubTest(report, "Test 5: OkHttp HTTP/1.1 without manual User-Agent", urlStr, null, Protocol.HTTP_1_1, null, wireInterceptor, wireHeadersMap);
+
+        // Test 6: Cookies / Challenge Flow
+        report.append("--- TEST 6: COOKIES & CHALLENGE FLOW (Homepage -> API) ---\n");
+        final List<Cookie> cookieList = new ArrayList<>();
+        CookieJar cookieJar = new CookieJar() {
+            @Override
+            public void saveFromResponse(HttpUrl url, List<Cookie> cookies) {
+                cookieList.addAll(cookies);
+            }
+            @Override
+            public List<Cookie> loadForRequest(HttpUrl url) {
+                return cookieList;
+            }
+        };
+
+        try {
+            OkHttpClient homeClient = new OkHttpClient.Builder()
+                    .connectTimeout(5, TimeUnit.SECONDS)
+                    .readTimeout(7, TimeUnit.SECONDS)
+                    .cookieJar(cookieJar)
+                    .build();
+            Request homeReq = new Request.Builder()
+                    .url("https://www.sofascore.com/")
+                    .header("User-Agent", uaChrome124)
+                    .build();
+            try (Response homeResp = homeClient.newCall(homeReq).execute()) {
+                report.append("Homepage Status: ").append(homeResp.code()).append(" ")
+                        .append(homeResp.message()).append("\n");
+                report.append("Cookies collected from homepage: ").append(cookieList.size()).append("\n");
+                for (Cookie c : cookieList) {
+                    report.append("  Cookie: ").append(c.name()).append("=").append(c.value()).append("\n");
+                }
+            }
+        } catch (Exception e) {
+            report.append("Homepage check error: ").append(e.getMessage()).append("\n");
+        }
+
+        runOkHttpSubTest(report, "Test 6 (Variant D): API with CookieJar + Chrome 124 UA", urlStr, uaChrome124, Protocol.HTTP_2, cookieJar, wireInterceptor, wireHeadersMap);
+
+        report.append("==================== [DIAG-STAGE-2] EXPERIMENT END ====================\n");
+        String finalReport = report.toString();
+        Log.i(TAG, finalReport);
+        for (String line : finalReport.split("\n")) {
+            Log.i("SOFA_DIAG", line);
+        }
+        System.out.println(finalReport);
+        return finalReport;
+    }
+
+    private static void runOkHttpSubTest(StringBuilder report, String testName, String urlStr, String ua,
+                                         Protocol protocol, CookieJar cookieJar,
+                                         Interceptor wireInterceptor, Map<String, Headers> wireHeadersMap) {
+        report.append("--- ").append(testName).append(" ---\n");
+        report.append("HTTP CLIENT: OkHttp 4.12.0\n");
+        report.append("CONFIGURED UA: ").append(ua != null ? ua : "<NONE (OkHttp default)>").append("\n");
+        long t0 = System.currentTimeMillis();
+        try {
+            OkHttpClient.Builder builder = new OkHttpClient.Builder()
+                    .connectTimeout(5, TimeUnit.SECONDS)
+                    .readTimeout(7, TimeUnit.SECONDS)
+                    .addNetworkInterceptor(wireInterceptor);
+
+            if (protocol == Protocol.HTTP_1_1) {
+                builder.protocols(Collections.singletonList(Protocol.HTTP_1_1));
+            } else {
+                builder.protocols(Arrays.asList(Protocol.HTTP_2, Protocol.HTTP_1_1));
+            }
+
+            if (cookieJar != null) {
+                builder.cookieJar(cookieJar);
+            }
+
+            OkHttpClient client = builder.build();
+
+            Request.Builder reqB = new Request.Builder()
+                    .url(urlStr)
+                    .header("X-Test-Tag", testName)
+                    .header("Origin", "https://www.sofascore.com")
+                    .header("Referer", "https://www.sofascore.com/")
+                    .header("Accept", "application/json, text/plain, */*")
+                    .header("Accept-Language", "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7");
+
+            if (ua != null) {
+                reqB.header("User-Agent", ua);
+            }
+
+            Request req = reqB.build();
+            try (Response resp = client.newCall(req).execute()) {
+                long timing = System.currentTimeMillis() - t0;
+                Headers wireH = wireHeadersMap.get(testName);
+                String actualWireUa = "<unknown>";
+                if (wireH != null) {
+                    actualWireUa = wireH.get("User-Agent");
+                    report.append("Actual Wire Request Headers sent:\n");
+                    for (int i = 0; i < wireH.size(); i++) {
+                        if (!"X-Test-Tag".equalsIgnoreCase(wireH.name(i))) {
+                            report.append("  ").append(wireH.name(i)).append(": ").append(wireH.value(i)).append("\n");
+                        }
+                    }
+                }
+                report.append("ACTUAL WIRE USER-AGENT: ").append(actualWireUa).append("\n");
+                report.append("HTTP STATUS: ").append(resp.code()).append(" (").append(resp.message()).append(")\n");
+                report.append("RESPONSE SERVER: ").append(resp.header("Server")).append("\n");
+                report.append("PROTOCOL: ").append(resp.protocol()).append("\n");
+                report.append("TIMING: ").append(timing).append(" ms\n");
+
+                Handshake handshake = resp.handshake();
+                if (handshake != null) {
+                    report.append("TLS Version: ").append(handshake.tlsVersion()).append("\n");
+                    report.append("Cipher Suite: ").append(handshake.cipherSuite()).append("\n");
+                }
+
+                report.append("Response Headers:\n");
+                Headers rHeaders = resp.headers();
+                for (int i = 0; i < rHeaders.size(); i++) {
+                    report.append("  ").append(rHeaders.name(i)).append(": ").append(rHeaders.value(i)).append("\n");
+                }
+
+                String body = resp.body() != null ? resp.body().string() : "";
+                int bodyBytes = body.getBytes(StandardCharsets.UTF_8).length;
+                report.append("RESPONSE BODY SIZE: ").append(bodyBytes).append(" bytes\n");
+
+                if (resp.code() == 200 && !body.isEmpty()) {
+                    try {
+                        JSONObject testJson = new JSONObject(body);
+                        JSONArray evArr = testJson.optJSONArray("events");
+                        int evCount = evArr != null ? evArr.length() : 0;
+                        report.append("JSON VALIDATION: OK, events count = ").append(evCount).append("\n");
+                        if (evCount > 0) {
+                            JSONObject firstEv = evArr.optJSONObject(0);
+                            if (firstEv != null) {
+                                JSONObject ht = firstEv.optJSONObject("homeTeam");
+                                JSONObject at = firstEv.optJSONObject("awayTeam");
+                                JSONObject tourn = firstEv.optJSONObject("tournament");
+                                report.append("  FIRST EVENT ID: ").append(firstEv.opt("id")).append("\n");
+                                report.append("  FIRST TOURNAMENT: ").append(tourn != null ? tourn.optString("name") : "").append("\n");
+                                report.append("  TEAMS: ").append(ht != null ? ht.optString("name") : "").append(" vs ")
+                                        .append(at != null ? at.optString("name") : "").append("\n");
+                            }
+                        }
+                    } catch (Exception ex) {
+                        report.append("JSON VALIDATION NOTE: ").append(ex.getMessage()).append("\n");
+                    }
+                }
+
+                String snippet = body.length() > 250 ? body.substring(0, 250) : body;
+                report.append("Response Body (first 250 bytes):\n").append(snippet).append("\n");
+
+                List<String> setCookies = resp.headers("Set-Cookie");
+                report.append("Set-Cookie count: ").append(setCookies.size()).append("\n\n");
+            }
+        } catch (Exception e) {
+            long timing = System.currentTimeMillis() - t0;
+            report.append("ERROR [").append(e.getClass().getName()).append("]: ").append(e.getMessage())
+                    .append(" (timing: ").append(timing).append(" ms)\n");
+            if (e.getCause() != null) {
+                report.append("  CAUSE: ").append(e.getCause().getClass().getName()).append(": ").append(e.getCause().getMessage()).append("\n");
+            }
+            report.append("\n");
+        }
+    }
+
+    private static String getExternalIpSafe() {
+        String[] services = {"https://api.ipify.org", "https://icanhazip.com", "https://ifconfig.me/ip"};
+        for (String s : services) {
+            try {
+                URL u = new URL(s);
+                HttpURLConnection c = (HttpURLConnection) u.openConnection();
+                c.setConnectTimeout(3000);
+                c.setReadTimeout(3000);
+                c.setRequestProperty("User-Agent", "curl/7.88.1");
+                if (c.getResponseCode() == 200) {
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(c.getInputStream()))) {
+                        return reader.readLine().trim();
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        return "<unable to determine without external service>";
+    }
+
+    private static String readSnippet(InputStream is, int maxLen) {
+        if (is == null) return "<empty body>";
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            byte[] buf = new byte[maxLen];
+            int read = is.read(buf, 0, maxLen);
+            if (read > 0) {
+                return new String(buf, 0, read, StandardCharsets.UTF_8);
+            }
+        } catch (Exception e) {
+            return "<error reading body: " + e.getMessage() + ">";
+        }
+        return "<empty body>";
     }
 }
