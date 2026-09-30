@@ -137,14 +137,14 @@
           </div>
 
                     <div class="connection-mode-group">
-            <label class="mode-option" id="mode-opt-relay1">
-              <input type="radio" name="conn_mode" value="relay1" checked onchange="handleConnectionModeChange(this.value)">
+            <label class="mode-option" id="mode-opt-direct">
+              <input type="radio" name="conn_mode" value="direct" checked onchange="handleConnectionModeChange(this.value)">
               <div class="mode-info">
                 <div class="mode-title-row">
-                  <span class="mode-title">Основной сервер</span>
+                  <span class="mode-title">Прямое подключение</span>
                   <span class="mode-badge badge-rec">РЕКОМЕНДУЕТСЯ</span>
                 </div>
-                <div class="mode-desc">Автономный HTTPS-шлюз (работает на Ростелекоме без VPN)</div>
+                <div class="mode-desc">Прямой защищенный доступ к поставщикам данных (OkHttp)</div>
               </div>
             </label>
 
@@ -168,13 +168,13 @@
               </div>
             </label>
 
-            <label class="mode-option" id="mode-opt-direct">
-              <input type="radio" name="conn_mode" value="direct" onchange="handleConnectionModeChange(this.value)">
+            <label class="mode-option" id="mode-opt-relay1">
+              <input type="radio" name="conn_mode" value="relay1" onchange="handleConnectionModeChange(this.value)">
               <div class="mode-info">
                 <div class="mode-title-row">
-                  <span class="mode-title">Прямое подключение</span>
+                  <span class="mode-title">Резервный сервер</span>
                 </div>
-                <div class="mode-desc">Прямой доступ к поставщикам данных (Cronet)</div>
+                <div class="mode-desc">Автономный HTTPS-шлюз (резервный канал)</div>
               </div>
             </label>
 

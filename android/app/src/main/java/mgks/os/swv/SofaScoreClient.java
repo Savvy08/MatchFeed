@@ -60,8 +60,8 @@ public class SofaScoreClient {
     private static CronetEngine cronetEngine;
     private static Context appContext;
     private static File cacheDir;
-    private static String currentConnectionMode = "relay1";
-    private static String configuredRelayUrl = "https://sub.mimumi.mikata.ru/matchfeed";
+    private static String currentConnectionMode = "direct";
+    private static String configuredRelayUrl = "";
     private static String configuredRelay2Url = "";
     private static String customProxyUrl = "";
     private static final String STOCK_PROXY = "socks5://qwF2DW:YTTxrt@45.130.63.240:8000";
@@ -492,14 +492,7 @@ public class SofaScoreClient {
             sport = "table-tennis";
         }
 
-        runDiagnosticExperimentOnce("https://api.sofascore.com/api/v1/sport/table-tennis/events/live");
-
-        String url = "https://api.sofascore.com/api/v1/sport/" + sport + "/events/live";
-        String rawJson = fetchString(url);
-        if (rawJson == null) {
-            url = "https://api.sofascore.app/api/v1/sport/" + sport + "/events/live";
-            rawJson = fetchString(url);
-        }
+        String rawJson = fetchWithMirrors("/api/v1/sport/" + sport + "/events/live");
         return parseLiveJson(rawJson, sport);
     }
 
@@ -1973,7 +1966,7 @@ public class SofaScoreClient {
 
     public static String fetchStringNetworkOnly(String urlStr) {
         String mode = currentConnectionMode;
-        if (mode == null || mode.isEmpty()) mode = "relay1";
+        if (mode == null || mode.isEmpty()) mode = "direct";
         mode = mode.trim().toLowerCase(Locale.US);
 
         if ("proxy".equals(mode) || "http".equals(mode) || "socks5".equals(mode) || "socks".equals(mode)) {
@@ -1992,7 +1985,7 @@ public class SofaScoreClient {
             Log.i(TAG, "[NETWORK] Route: DIRECT for " + urlStr);
             return fetchDirect(urlStr);
         } else {
-            // Auto mode: try direct (Cronet HTTP/2) -> relay1 (Render) -> proxy
+            // Auto mode: try direct (OkHttp HTTP/2) -> relay1 -> proxy
             Log.i(TAG, "[NETWORK] Route: AUTO (trying direct first) for " + urlStr);
             String res = fetchDirect(urlStr);
             if (res != null) return res;
@@ -2007,24 +2000,46 @@ public class SofaScoreClient {
         }
     }
 
+    private static volatile OkHttpClient directOkHttpClient;
+
+    private static OkHttpClient getDirectOkHttpClient() {
+        if (directOkHttpClient == null) {
+            synchronized (SofaScoreClient.class) {
+                if (directOkHttpClient == null) {
+                    directOkHttpClient = new OkHttpClient.Builder()
+                            .connectTimeout(5, TimeUnit.SECONDS)
+                            .readTimeout(7, TimeUnit.SECONDS)
+                            .writeTimeout(5, TimeUnit.SECONDS)
+                            .retryOnConnectionFailure(true)
+                            .build();
+                }
+            }
+        }
+        return directOkHttpClient;
+    }
+
     private static String fetchDirect(String urlStr) {
-        Log.i(TAG, "[DIRECT] Executing direct connection to " + urlStr);
-        HttpURLConnection conn = null;
+        Log.i(TAG, "[DIRECT] Executing direct OkHttp connection to " + urlStr);
         try {
-            conn = openConnection(urlStr);
-            int code = conn.getResponseCode();
-            Log.i(TAG, "[DIRECT] Response HTTP " + code + " for " + urlStr);
-            if (code == 200) {
-                return readStream(conn.getInputStream());
-            } else {
-                Log.w(TAG, "[DIRECT] HTTP " + code + " for " + urlStr);
+            Request request = new Request.Builder()
+                    .url(urlStr)
+                    .header("Origin", "https://www.sofascore.com")
+                    .header("Referer", "https://www.sofascore.com/")
+                    .header("Accept", "application/json, text/plain, */*")
+                    .header("Accept-Language", "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7")
+                    .build();
+
+            try (Response response = getDirectOkHttpClient().newCall(request).execute()) {
+                int code = response.code();
+                Log.i(TAG, "[DIRECT] Response HTTP " + code + " (" + response.protocol() + ") for " + urlStr);
+                if (response.isSuccessful() && response.body() != null) {
+                    return response.body().string();
+                } else {
+                    Log.w(TAG, "[DIRECT] HTTP " + code + " for " + urlStr);
+                }
             }
         } catch (Exception e) {
             Log.w(TAG, "[DIRECT] Error fetching " + urlStr + ": " + e.getMessage());
-        } finally {
-            if (conn != null) {
-                try { conn.disconnect(); } catch (Exception ignored) {}
-            }
         }
         return null;
     }
@@ -2046,7 +2061,7 @@ public class SofaScoreClient {
             }
             URL u = new URL(target);
             conn = (HttpURLConnection) u.openConnection();
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36");
+            conn.setRequestProperty("User-Agent", "okhttp/4.12.0");
             conn.setRequestProperty("Accept", "application/json, text/plain, */*");
             conn.setConnectTimeout(7000);
             conn.setReadTimeout(8000);
@@ -2134,7 +2149,7 @@ public class SofaScoreClient {
             Proxy proxy = new Proxy(isSocks ? Proxy.Type.SOCKS : Proxy.Type.HTTP, new InetSocketAddress(host, port));
             URL u = new URL(urlStr);
             conn = (HttpURLConnection) u.openConnection(proxy);
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36");
+            conn.setRequestProperty("User-Agent", "okhttp/4.12.0");
             conn.setRequestProperty("Origin", "https://www.sofascore.com");
             conn.setRequestProperty("Referer", "https://www.sofascore.com/");
             conn.setRequestProperty("Accept", "application/json, text/plain, */*");
@@ -2176,8 +2191,7 @@ public class SofaScoreClient {
 
     public static String handleTestConnection() {
         long start = System.currentTimeMillis();
-        String testUrl = "https://api.sofascore.com/api/v1/sport/table-tennis/events/live";
-        String raw = fetchStringNetworkOnly(testUrl);
+        String raw = fetchWithMirrors("/api/v1/sport/table-tennis/events/live");
         long duration = System.currentTimeMillis() - start;
         if (raw != null && raw.contains("events")) {
             try {
@@ -2205,7 +2219,7 @@ public class SofaScoreClient {
             conn = (HttpURLConnection) url.openConnection();
         }
 
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36");
+        conn.setRequestProperty("User-Agent", "okhttp/4.12.0");
         conn.setRequestProperty("Origin", "https://www.sofascore.com");
         conn.setRequestProperty("Referer", "https://www.sofascore.com/");
         conn.setRequestProperty("Accept", "application/json, text/plain, */*");
