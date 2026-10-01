@@ -291,7 +291,7 @@ def handle_live(sport):
 
                 ts = e.get("startTimestamp")
                 status_label = STATUS_RU.get(status_desc, status_desc.capitalize() if status_desc else "LIVE")
-                time_formatted = status_label if norm_status == "live" else ("--:--" if not ts else "")
+                time_formatted = status_label if norm_status == "live" else (datetime.fromtimestamp(ts).strftime("%d.%m, %H:%M") if ts else "--:--")
 
                 hs = safe_dict(e.get("homeScore"))
                 aws = safe_dict(e.get("awayScore"))
@@ -329,6 +329,7 @@ def handle_live(sport):
                     "sets": sets
                 })
 
+            matches.sort(key=lambda m: m.get("startTimestamp") or 0, reverse=True)
             print(json.dumps({"success": True, "sport": slug, "matches": matches}, ensure_ascii=False))
     except Exception as exc:
         print(json.dumps({"success": False, "error": format_error(exc), "matches": []}, ensure_ascii=False))
@@ -425,6 +426,7 @@ def handle_player(player_id, page=0):
                             },
                             "status": STATUS_RU.get(status_desc, status_obj.get("description", "Предстоит"))
                         })
+                next_matches.sort(key=lambda m: m.get("startTimestamp") or 0)
             except Exception:
                 pass
 
@@ -476,6 +478,7 @@ def handle_player(player_id, page=0):
 
                     ts = e.get("startTimestamp")
                     dt_str = datetime.fromtimestamp(ts).strftime("%d.%m.%Y") if ts else "-"
+                    time_str = datetime.fromtimestamp(ts).strftime("%H:%M") if ts else ""
 
                     tourn = safe_dict(e.get("tournament"))
                     cat = safe_dict(tourn.get("category"))
@@ -485,6 +488,7 @@ def handle_player(player_id, page=0):
                     matches.append({
                         "id": str(e.get("id", "")),
                         "date": dt_str,
+                        "time": time_str,
                         "startTimestamp": ts,
                         "tournament": ru_name(tourn),
                         "category": ru_name(cat),
@@ -1017,6 +1021,7 @@ def handle_event(event_id):
                                     "score": te_aws.get("current")
                                 }
                             })
+                        tourn_matches.sort(key=lambda m: m.get("startTimestamp") or 0, reverse=True)
                 except Exception:
                     pass
 

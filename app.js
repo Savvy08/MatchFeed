@@ -388,32 +388,60 @@ function goBackFromPlayer() {
 }
 
 // Match feed fetching & rendering
+// Сортировка матчей
+function sortMatches(list, type = 'history') {
+  if (!Array.isArray(list) || list.length === 0) return [];
+  const statusOrder = { 'live': 1, 'upcoming': 2, 'finished': 3 };
+
+  return [...list].sort((a, b) => {
+    const tsA = typeof a.startTimestamp === 'number' ? a.startTimestamp : (Number(a.startTimestamp) || 0);
+    const tsB = typeof b.startTimestamp === 'number' ? b.startTimestamp : (Number(b.startTimestamp) || 0);
+
+    if (type === 'feed') {
+      const sA = a.status || '';
+      const sB = b.status || '';
+      const orderA = statusOrder[sA] || 99;
+      const orderB = statusOrder[sB] || 99;
+      if (orderA !== orderB) return orderA - orderB;
+
+      if (sA === 'upcoming') {
+        return (tsA || 0) - (tsB || 0);
+      }
+      return (tsB || 0) - (tsA || 0);
+    }
+
+    if (type === 'favorites') {
+      const isLiveA = a.status === 'live';
+      const isLiveB = b.status === 'live';
+      if (isLiveA !== isLiveB) return isLiveA ? -1 : 1;
+      return (tsB || 0) - (tsA || 0);
+    }
+
+    if (type === 'upcoming') {
+      return (tsA || 0) - (tsB || 0);
+    }
+
+    return (tsB || 0) - (tsA || 0);
+  });
+}
+
 function formatMatchTime(m) {
   if (m.status === 'live') {
     return `<span>${escapeHtml(m.time || 'LIVE')}</span>`;
   }
-  if (m.status === 'finished') {
-    const t = m.time || 'Завершён';
-    if (t.includes(', ')) {
-      const parts = t.split(', ');
-      return `<span class="time-date">${escapeHtml(parts[0])}</span><span class="time-hour">${escapeHtml(parts[1])}</span>`;
-    }
-    return `<span>${escapeHtml(t)}</span>`;
-  }
   if (m.startTimestamp) {
     const d = new Date(m.startTimestamp * 1000);
-    const now = new Date();
-    const isDifferentDay = d.getDate() !== now.getDate() || d.getMonth() !== now.getMonth() || d.getFullYear() !== now.getFullYear();
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
     const hours = String(d.getHours()).padStart(2, '0');
     const minutes = String(d.getMinutes()).padStart(2, '0');
-    if (isDifferentDay) {
-      const day = String(d.getDate()).padStart(2, '0');
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      return `<span class="time-date">${day}.${month}</span><span class="time-hour">${hours}:${minutes}</span>`;
-    }
-    return `<span>${hours}:${minutes}</span>`;
+    return `<span class="time-date">${day}.${month}</span><span class="time-hour">${hours}:${minutes}</span>`;
   }
-  return `<span>${escapeHtml(m.time || '--:--')}</span>`;
+  if (m.time && m.time.includes(', ')) {
+    const parts = m.time.split(', ');
+    return `<span class="time-date">${escapeHtml(parts[0])}</span><span class="time-hour">${escapeHtml(parts[1])}</span>`;
+  }
+  return `<span>${escapeHtml(m.time || (m.status === 'finished' ? 'Завершён' : '--:--'))}</span>`;
 }
 
 // Native bridge async callback registry
@@ -742,12 +770,28 @@ function setFavSubTab(tab) {
 }
 
 function groupMatches(list) {
-  const groups = {};
+  if (!Array.isArray(list) || list.length === 0) return [];
+  const groups = [];
+  let currentGroup = null;
+
   list.forEach(m => {
-    const key = `${m.country ? m.country + ': ' : ''}${m.tournament}`;
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(m);
+    const leagueName = `${m.country ? m.country + ': ' : ''}${m.tournament || 'Турнир'}`;
+    const d = m.startTimestamp ? new Date(m.startTimestamp * 1000) : null;
+    const dateKey = d ? `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}` : (m.date || '');
+    const groupKey = `${dateKey}_${leagueName}`;
+
+    if (currentGroup && currentGroup.key === groupKey) {
+      currentGroup.items.push(m);
+    } else {
+      currentGroup = {
+        key: groupKey,
+        league: leagueName,
+        items: [m]
+      };
+      groups.push(currentGroup);
+    }
   });
+
   return groups;
 }
 
@@ -840,18 +884,11 @@ function renderMatches() {
       return;
     }
 
-    const statusOrder = { 'live': 1, 'upcoming': 2, 'finished': 3 };
-    favMatchesList.sort((a, b) => {
-      const orderA = statusOrder[a.status] || 99;
-      const orderB = statusOrder[b.status] || 99;
-      if (orderA !== orderB) return orderA - orderB;
-      return (b.startTimestamp || 0) - (a.startTimestamp || 0);
-    });
-
-    const grouped = groupMatches(favMatchesList);
+    const sortedFavs = sortMatches(favMatchesList, 'favorites');
+    const grouped = groupMatches(sortedFavs);
     let html = subtabsHtml;
 
-    for (const [league, items] of Object.entries(grouped)) {
+    for (const { league, items } of grouped) {
       html += `
         <div class="league-group">
           <div class="league-header">${escapeHtml(league)}</div>
@@ -905,17 +942,8 @@ function renderMatches() {
     filtered = matches.filter(m => m.status === 'finished');
   }
 
-  const statusOrder = { 'live': 1, 'upcoming': 2, 'finished': 3 };
-  filtered = [...filtered].sort((a, b) => {
-    const orderA = statusOrder[a.status] || 99;
-    const orderB = statusOrder[b.status] || 99;
-    if (orderA !== orderB) return orderA - orderB;
-    if (a.status === 'upcoming') {
-      return (a.startTimestamp || 0) - (b.startTimestamp || 0);
-    }
-    // Новые матчи сверху, старые снизу
-    return (b.startTimestamp || 0) - (a.startTimestamp || 0);
-  });
+  const sortType = currentStatus === 'finished' ? 'history' : (currentStatus === 'live' ? 'history' : 'feed');
+  filtered = sortMatches(filtered, sortType);
 
   if (filtered.length === 0) {
     container.innerHTML = `
@@ -933,7 +961,7 @@ function renderMatches() {
   const grouped = groupMatches(filtered);
   let html = '';
 
-  for (const [league, items] of Object.entries(grouped)) {
+  for (const { league, items } of grouped) {
     html += `
       <div class="league-group">
         <div class="league-header">${escapeHtml(league)}</div>
@@ -1371,15 +1399,24 @@ function getMatchH2HHtml(data) {
     duelBarHtml = `<div class="match-tab-empty-note">История личных дуэлей пока формируется</div>`;
   }
 
-  const directMatches = Array.isArray(data.h2h?.matches) ? data.h2h.matches : [];
+  const directMatches = sortMatches(Array.isArray(data.h2h?.matches) ? data.h2h.matches : [], 'history');
   let matchesListHtml = '';
   if (directMatches.length > 0) {
     matchesListHtml = directMatches.map(m => {
+      let dateDisplay = escapeHtml(m.date || '');
+      if (m.startTimestamp) {
+        const d = new Date(m.startTimestamp * 1000);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const hours = String(d.getHours()).padStart(2, '0');
+        const minutes = String(d.getMinutes()).padStart(2, '0');
+        dateDisplay = `${day}.${month}, ${hours}:${minutes}`;
+      }
       return `
         <div class="h2h-match-item" onclick="openMatchDetail('${escapeJs(m.id)}')">
           <div class="h2h-match-top">
             <span class="h2h-match-tourn">${escapeHtml(m.tournament || 'Турнир')}</span>
-            <span class="h2h-match-date">${escapeHtml(m.date || '')}</span>
+            <span class="h2h-match-date">${dateDisplay}</span>
           </div>
           <div class="h2h-match-teams">
             <span class="h2h-team-name ${m.winnerCode === 1 ? 'winner' : ''}">${escapeHtml(m.homeTeam || homeName)}</span>
@@ -1431,7 +1468,7 @@ function getMatchFormHtml(data) {
     }
     const streakClass = streak.type === 'win' ? 'win' : (streak.type === 'loss' ? 'loss' : 'none');
     const winRate = fData.winRate !== undefined ? `${fData.winRate}% побед` : '';
-    const mList = Array.isArray(fData.matches) ? fData.matches : [];
+    const mList = sortMatches(Array.isArray(fData.matches) ? fData.matches : [], 'history');
 
     const badgesHtml = mList.map(m => {
       let bClass = 'draw';
@@ -1447,13 +1484,23 @@ function getMatchFormHtml(data) {
       if (m.won === true) { bClass = 'win'; bLetter = 'В'; }
       else if (m.won === false) { bClass = 'loss'; bLetter = 'П'; }
 
+      let dateDisplay = escapeHtml(m.date || '');
+      if (m.startTimestamp) {
+        const d = new Date(m.startTimestamp * 1000);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const hours = String(d.getHours()).padStart(2, '0');
+        const minutes = String(d.getMinutes()).padStart(2, '0');
+        dateDisplay = `${day}.${month}, ${hours}:${minutes}`;
+      }
+
       return `
         <div class="form-match-row" ${m.id ? `onclick="openMatchDetail('${escapeJs(m.id)}')"` : ''}>
           <div class="form-match-left">
             <span class="form-badge small ${bClass}">${bLetter}</span>
             <div class="form-match-opp">
               <span class="form-opp-name">против ${escapeHtml(m.opponent || 'Соперник')}</span>
-              <span class="form-match-date">${escapeHtml(m.date || '')} • ${escapeHtml(m.tournament || '')}</span>
+              <span class="form-match-date">${dateDisplay} • ${escapeHtml(m.tournament || '')}</span>
             </div>
           </div>
           <div class="form-match-score">${escapeHtml(m.scoreStr || m.score || '-')}</div>
@@ -1487,7 +1534,7 @@ function getMatchFormHtml(data) {
 function getMatchBracketHtml(data) {
   const bracket = data.bracket || {};
   const hasTree = Boolean(bracket.hasTree && Array.isArray(bracket.tree) && bracket.tree.length > 0);
-  const matches = Array.isArray(bracket.matches) ? bracket.matches : [];
+  const matches = sortMatches(Array.isArray(bracket.matches) ? bracket.matches : [], 'history');
 
   if (!hasTree && matches.length === 0) {
     return `
@@ -1580,10 +1627,20 @@ function getMatchBracketHtml(data) {
     const aScore = m.awayTeam?.score !== null && m.awayTeam?.score !== undefined ? m.awayTeam.score : '-';
     const statusText = m.isLive ? 'LIVE' : (m.status || '');
 
+    let dateDisplay = escapeHtml(m.round || m.date || 'Матч');
+    if (m.startTimestamp) {
+      const d = new Date(m.startTimestamp * 1000);
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      dateDisplay = `${day}.${month}, ${hours}:${minutes}${m.round ? ' (' + escapeHtml(m.round) + ')' : ''}`;
+    }
+
     return `
       <div class="bracket-match-item ${isCurrent ? 'current' : ''}" onclick="openMatchDetail('${escapeJs(m.id)}')">
         <div class="bracket-match-header">
-          <span class="bracket-round-name">${escapeHtml(m.round || m.date || 'Матч')}</span>
+          <span class="bracket-round-name">${dateDisplay}</span>
           ${isCurrent ? '<span class="bracket-current-badge">Текущий матч</span>' : ''}
           <span class="bracket-status-tag ${m.isLive ? 'live' : ''}">${escapeHtml(statusText)}</span>
         </div>
@@ -1952,7 +2009,10 @@ async function openPlayerProfile(playerId, playerName) {
     currentPlayerData = data;
     const stats = data.stats || { totalMatches: 0, wins: 0, losses: 0, winRate: 0, pointsWon: 0, pointsLost: 0 };
     if (Array.isArray(data.matches)) {
-      data.matches.sort((a, b) => (b.startTimestamp || 0) - (a.startTimestamp || 0));
+      data.matches = sortMatches(data.matches, 'history');
+    }
+    if (Array.isArray(data.nextMatches)) {
+      data.nextMatches = sortMatches(data.nextMatches, 'upcoming');
     }
 
     if (titleEl) titleEl.textContent = 'Профиль игрока';
@@ -2044,8 +2104,8 @@ function getPlayerOverviewHtml(data) {
   const stats = data.stats || {};
   const streak = stats.currentStreak || { type: 'none', count: 0 };
   const recentForm = stats.recentForm || [];
-  const nextMatches = data.nextMatches || [];
-  const matches = data.matches || [];
+  const nextMatches = sortMatches(data.nextMatches || [], 'upcoming');
+  const matches = sortMatches(data.matches || [], 'history');
 
   let streakHtml = '';
   if (streak.count > 0) {
@@ -2079,6 +2139,15 @@ function getPlayerOverviewHtml(data) {
   let matchCardHtml = '';
   if (nextMatches.length > 0) {
     const nm = nextMatches[0];
+    let nmTime = `${escapeHtml(nm.date || '')} ${escapeHtml(nm.time || '')}`.trim();
+    if (nm.startTimestamp) {
+      const d = new Date(nm.startTimestamp * 1000);
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      nmTime = `${day}.${month}, ${hours}:${minutes}`;
+    }
     matchCardHtml = `
       <div class="player-tab-section">
         <div class="player-section-header">
@@ -2089,7 +2158,7 @@ function getPlayerOverviewHtml(data) {
           <div class="featured-match-info">
             <div class="featured-match-tourn">${escapeHtml(nm.tournament)}</div>
             <div class="featured-match-opp">vs ${escapeHtml(nm.opponent.name)}</div>
-            <div class="featured-match-time">${escapeHtml(nm.date)} ${escapeHtml(nm.time || '')}</div>
+            <div class="featured-match-time">${nmTime}</div>
           </div>
           <button class="featured-match-btn">Подробнее</button>
         </div>
@@ -2106,6 +2175,19 @@ function getPlayerOverviewHtml(data) {
       : (isLoss
         ? `Поражение${setsStr ? ' ' + setsStr : ''}`
         : `Матч${setsStr ? ' ' + setsStr : ''}`);
+
+    let lmTime = escapeHtml(lm.date || '-');
+    if (lm.startTimestamp) {
+      const d = new Date(lm.startTimestamp * 1000);
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      lmTime = `${day}.${month}, ${hours}:${minutes}`;
+    } else if (lm.time) {
+      lmTime = `${escapeHtml(lm.date || '-')}, ${escapeHtml(lm.time)}`;
+    }
+
     matchCardHtml = `
       <div class="player-tab-section">
         <div class="player-section-header">
@@ -2116,7 +2198,7 @@ function getPlayerOverviewHtml(data) {
           <div class="featured-match-info">
             <div class="featured-match-tourn">${escapeHtml(lm.tournament || '-')}</div>
             <div class="featured-match-opp">vs ${escapeHtml(lm.opponent?.name || 'Соперник')}</div>
-            <div class="featured-match-time">${escapeHtml(lm.date || '-')}</div>
+            <div class="featured-match-time">${lmTime}</div>
           </div>
           <button class="featured-match-btn">Обзор матча</button>
         </div>
@@ -2177,8 +2259,8 @@ function getPlayerOverviewHtml(data) {
 
 // Формирование вкладки Матчи
 function getPlayerMatchesHtml(data) {
-  const allMatches = data.matches || [];
-  const nextMatches = data.nextMatches || [];
+  const allMatches = sortMatches(data.matches || [], 'history');
+  const nextMatches = sortMatches(data.nextMatches || [], 'upcoming');
   const winsCount = data.stats?.wins ?? allMatches.filter(m => m.won === true).length;
   const lossesCount = data.stats?.losses ?? allMatches.filter(m => m.won === false).length;
   const upcomingCount = nextMatches.length;
@@ -2233,7 +2315,17 @@ function renderPlayerNextMatchesList(list) {
   }
 
   let html = '';
-  list.forEach(m => {
+  const sortedList = sortMatches(list, 'upcoming');
+  sortedList.forEach(m => {
+    let dateDisplay = `${escapeHtml(m.date || '-')} ${escapeHtml(m.time || '')}`.trim();
+    if (m.startTimestamp) {
+      const d = new Date(m.startTimestamp * 1000);
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      dateDisplay = `${day}.${month}, ${hours}:${minutes}`;
+    }
     html += `
       <div class="player-match-card upcoming" onclick="openMatchDetail('${escapeHtml(m.id)}')">
         <div class="match-card-top">
@@ -2242,7 +2334,7 @@ function renderPlayerNextMatchesList(list) {
         </div>
         <div class="match-card-bottom" style="margin-top:8px;">
           <div class="match-card-tourn">${escapeHtml(m.tournament || '-')}</div>
-          <div>${escapeHtml(m.date || '-')} ${escapeHtml(m.time || '')}</div>
+          <div>${dateDisplay}</div>
         </div>
       </div>
     `;
@@ -2394,7 +2486,8 @@ function renderPlayerMatchesList(list) {
   }
 
   let html = '';
-  list.forEach(m => {
+  const sortedList = sortMatches(list, 'history');
+  sortedList.forEach(m => {
     const isWin = m.won === true;
     const isLoss = m.won === false;
     const cardClass = isWin ? 'win' : (isLoss ? 'loss' : '');
@@ -2413,6 +2506,18 @@ function renderPlayerMatchesList(list) {
       setsChips += `<span class="set-chip ${chipClass}">${s.player}:${s.opponent}</span>`;
     });
 
+    let dateDisplay = escapeHtml(m.date || '-');
+    if (m.startTimestamp) {
+      const d = new Date(m.startTimestamp * 1000);
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      dateDisplay = `${day}.${month}, ${hours}:${minutes}`;
+    } else if (m.time) {
+      dateDisplay = `${escapeHtml(m.date || '-')}, ${escapeHtml(m.time)}`;
+    }
+
     html += `
       <div class="player-match-card ${cardClass}" onclick="openMatchDetail('${escapeHtml(m.id)}')">
         <div class="match-card-top">
@@ -2426,7 +2531,7 @@ function renderPlayerMatchesList(list) {
 
         <div class="match-card-bottom">
           <div class="match-card-tourn">${escapeHtml(m.tournament || '-')}</div>
-          <div>${escapeHtml(m.date || '-')}</div>
+          <div>${dateDisplay}</div>
         </div>
       </div>
     `;
@@ -2452,7 +2557,7 @@ async function loadMorePlayerMatches() {
     }
 
     if (currentPlayerData && currentPlayerData.matches) {
-      currentPlayerData.matches = currentPlayerData.matches.concat(data.matches);
+      currentPlayerData.matches = sortMatches(currentPlayerData.matches.concat(data.matches), 'history');
     }
 
     if (currentPlayerTab === 'matches') {
