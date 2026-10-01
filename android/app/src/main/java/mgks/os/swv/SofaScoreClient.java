@@ -28,6 +28,7 @@ import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -36,6 +37,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TimeZone;
 import java.util.Arrays;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -664,6 +666,7 @@ public class SofaScoreClient {
                     JSONArray nEvents = nRoot.optJSONArray("events");
                     if (nEvents != null) {
                         SimpleDateFormat sdfDate = new SimpleDateFormat("dd.MM.yyyy", Locale.getDefault());
+                        sdfDate.setTimeZone(TimeZone.getTimeZone("UTC"));
                         SimpleDateFormat sdfTime = new SimpleDateFormat("HH:mm", Locale.getDefault());
                         for (int i = 0; i < nEvents.length(); i++) {
                             JSONObject e = nEvents.optJSONObject(i);
@@ -713,6 +716,7 @@ public class SofaScoreClient {
                     JSONArray events = hRoot.optJSONArray("events");
                     if (events != null) {
                         SimpleDateFormat sdfDate = new SimpleDateFormat("dd.MM.yyyy", Locale.getDefault());
+                        sdfDate.setTimeZone(TimeZone.getTimeZone("UTC"));
                         for (int i = 0; i < events.length(); i++) {
                             JSONObject e = events.optJSONObject(i);
                             if (e == null) continue;
@@ -793,6 +797,16 @@ public class SofaScoreClient {
                     Log.w(TAG, "Failed to parse player history", e);
                 }
             }
+
+            // Sort matches descending by startTimestamp (newest first)
+            Collections.sort(matchesList, new Comparator<JSONObject>() {
+                @Override
+                public int compare(JSONObject o1, JSONObject o2) {
+                    long t1 = o1.optLong("startTimestamp", 0);
+                    long t2 = o2.optLong("startTimestamp", 0);
+                    return Long.compare(t2, t1);
+                }
+            });
 
             // Determine main league
             String mainLeague = "";
@@ -1263,6 +1277,7 @@ public class SofaScoreClient {
                         JSONArray tmEvents = new JSONObject(tmJson).optJSONArray("events");
                         if (tmEvents != null) {
                             SimpleDateFormat sdfShort = new SimpleDateFormat("dd.MM", Locale.getDefault());
+                            sdfShort.setTimeZone(TimeZone.getTimeZone("UTC"));
                             for (int i = 0; i < Math.min(tmEvents.length(), 10); i++) {
                                 JSONObject te = tmEvents.optJSONObject(i);
                                 if (te == null) continue;
@@ -1614,7 +1629,10 @@ public class SofaScoreClient {
     private static void parseTeamFormEvents(JSONArray events, String teamId, String oppId, String currentEventId, List<JSONObject> formList, List<JSONObject> directList) {
         if (events == null) return;
         SimpleDateFormat sdf = new SimpleDateFormat("dd.MM", Locale.getDefault());
-        int count = 0;
+        sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+        List<JSONObject> allForm = new ArrayList<>();
+        List<JSONObject> allDirect = new ArrayList<>();
+
         for (int i = 0; i < events.length(); i++) {
             JSONObject e = events.optJSONObject(i);
             if (e == null) continue;
@@ -1671,12 +1689,8 @@ public class SofaScoreClient {
                 m.put("setsStr", setsStr);
                 m.put("opponent", opp != null ? ruName(opp, "name") : "Соперник");
                 m.put("tournament", ruName(tourn, "name"));
+                allForm.add(m);
             } catch (Exception ignored) {}
-
-            if (count < 5) {
-                formList.add(m);
-                count++;
-            }
 
             if (directList != null && oppId != null && opp != null && String.valueOf(opp.opt("id")).equals(oppId)) {
                 JSONObject dm = new JSONObject();
@@ -1694,8 +1708,28 @@ public class SofaScoreClient {
                     dm.put("scoreStr", (hp != null && ap != null) ? (hp + " - " + ap) : "-");
                     dm.put("winnerCode", wc);
                     dm.put("setsStr", setsStr);
-                    directList.add(dm);
+                    allDirect.add(dm);
                 } catch (Exception ignored) {}
+            }
+        }
+
+        Comparator<JSONObject> descComp = new Comparator<JSONObject>() {
+            @Override
+            public int compare(JSONObject o1, JSONObject o2) {
+                long t1 = o1.optLong("startTimestamp", 0);
+                long t2 = o2.optLong("startTimestamp", 0);
+                return Long.compare(t2, t1);
+            }
+        };
+        Collections.sort(allForm, descComp);
+        Collections.sort(allDirect, descComp);
+
+        for (int i = 0; i < Math.min(allForm.size(), 5); i++) {
+            formList.add(allForm.get(i));
+        }
+        if (directList != null) {
+            for (int i = 0; i < Math.min(allDirect.size(), 10); i++) {
+                directList.add(allDirect.get(i));
             }
         }
     }
