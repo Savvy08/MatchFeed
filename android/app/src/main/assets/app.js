@@ -2453,6 +2453,7 @@ async function loadMorePlayerMatches() {
 
     if (currentPlayerData && currentPlayerData.matches) {
       currentPlayerData.matches = currentPlayerData.matches.concat(data.matches);
+      currentPlayerData.matches.sort((a, b) => (b.startTimestamp || 0) - (a.startTimestamp || 0));
     }
 
     if (currentPlayerTab === 'matches') {
