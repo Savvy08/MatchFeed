@@ -9,6 +9,18 @@
 -----
 
 <p align="center">
+  <a href="https://matchfeed.netlify.app/" target="_blank" rel="noopener noreferrer">
+    <img src="https://img.shields.io/badge/Сайт_проекта-MatchFeed_↗-00d084?style=for-the-badge&logo=googlechrome&logoColor=white&labelColor=2f363d" alt="Сайт проекта MatchFeed" />
+  </a>
+  <br />
+  <sub>Нажмите на кнопку, чтобы открыть веб-версию</sub>
+</p>
+
+
+
+
+
+<p align="center">
   <img
     src="https://github.com/user-attachments/assets/28f9e944-dade-4766-8067-f5e09d7378ad"
     alt="MatchFeed - Android APK"
